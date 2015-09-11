@@ -12,75 +12,65 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import logging
-import numpy as np
 
-from neon import NervanaObject
 from neon.backends import gen_backend
-from neon.initializers import GlorotUniform, Uniform
+from neon.initializers import GlorotUniform
 from neon.optimizers import GradientDescentMomentum, Schedule
-from neon.layers import Conv, Deconv, Convolution, Dropout, Activation, Pooling, GeneralizedCost, BatchNorm
-from neon.transforms import *
+from neon.layers import Conv, Dropout, Activation, Pooling, GeneralizedCost
+from neon.transforms import Rectlin, Softmax, CrossEntropyMulti, Misclassification
 from neon.models import Model
 from neon.data import DataIterator, load_cifar10
+from neon.callbacks.callbacks import Callbacks
+from neon.util.argparser import NeonArgparser
 from matplotlib import pyplot as plt
 from matplotlib import cm
 from textwrap import wrap
 import cPickle as pickle
 
-logging.basicConfig(level=20)
-logger = logging.getLogger()
+parser = NeonArgparser(__doc__)
+args = parser.parse_args()
 
-ng = gen_backend(backend='gpu', rng_seed=0)
-NervanaObject.be = ng
+# hyperparameters
+batch_size = 128
+num_epochs = args.epochs
 
-ng.bsz = ng.batch_size = 32 
-ng.epsilon = 2**-23
-num_epochs = 100 
-np.random.seed(0)
+# setup backend
+be = gen_backend(backend=args.backend,
+                 batch_size=batch_size,
+                 rng_seed=args.rng_seed,
+                 device_id=args.device_id,
+                 default_dtype=args.datatype)
 
-(X_train, y_train), (X_test, y_test), nclass, lshape = load_cifar10()
+(X_train, y_train), (X_test, y_test), nclass, lshape = load_cifar10(path=args.data_dir)
 
 # really 10 classes, pad to nearest power of 2 to match conv output
-train = DataIterator(X_train, y_train, nclass=16, lshape=lshape)
+train_set = DataIterator(X_train, y_train, nclass=16, lshape=lshape)
+valid_set = DataIterator(X_test, y_test, nclass=16, lshape=lshape)
 
 init_uni = GlorotUniform()
-opt_gdm = GradientDescentMomentum(learning_rate=0.01,
-                                  momentum_coef=0.9)
+opt_gdm = GradientDescentMomentum(learning_rate=0.5,
+                                  schedule=Schedule(step_config=[200, 250, 300],
+                                                    change=0.1),
+                                  momentum_coef=0.9, wdecay=.0001)
 
 layers = []
 
-# dropout 20% here
-# layers.append(Dropout(keep=.8))
-
-layers.append(Convolution((3,3,96), init=init_uni))
-layers.append(Activation(transform=Rectlin()))
-
-layers.append(Conv((3,3,96), init=init_uni, pad=1))
-layers.append(Activation(transform=Rectlin()))
-
-layers.append(Conv((3,3,96), init=init_uni, pad=1, strides=2))
-layers.append(Activation(transform=Rectlin()))
+layers.append(Dropout(keep=.8))
+layers.append(Conv((3, 3, 96), init=init_uni, batch_norm=True, activation=Rectlin()))
+layers.append(Conv((3, 3, 96), init=init_uni, batch_norm=True, activation=Rectlin(), pad=1))
+layers.append(Conv((3, 3, 96), init=init_uni, batch_norm=True, activation=Rectlin(), pad=1, strides=2))
 layers.append(Dropout(keep=.5))
 
-layers.append(Conv((3,3,192), init=init_uni, pad=1))
-layers.append(Activation(transform=Rectlin()))
-
-layers.append(Conv((3,3,192), init=init_uni, pad=1))
-layers.append(Activation(transform=Rectlin()))
-
-layers.append(Conv((3,3,192), init=init_uni, pad=1, strides=2))
-layers.append(Activation(transform=Rectlin()))
+layers.append(Conv((3, 3, 192), init=init_uni, batch_norm=True, activation=Rectlin(), pad=1))
+layers.append(Conv((3, 3, 192), init=init_uni, batch_norm=True, activation=Rectlin(), pad=1))
+layers.append(Conv((3, 3, 192), init=init_uni, batch_norm=True, activation=Rectlin(), pad=1, strides=2))
 layers.append(Dropout(keep=.5))
 
-layers.append(Conv((3,3,192), init=init_uni))
-layers.append(Activation(transform=Rectlin()))
-
-layers.append(Conv((1,1,192), init=init_uni))
-layers.append(Activation(transform=Rectlin()))
-
+layers.append(Conv((3, 3, 192), init=init_uni, batch_norm=True, activation=Rectlin()))
+layers.append(Conv((1 ,1, 192), init=init_uni, batch_norm=True, activation=Rectlin()))
 layers.append(Conv((1,1,16), init=init_uni, activation=Rectlin()))
-layers.append(Pooling(6, op="mean"))
+
+layers.append(Pooling(6, op="avg"))
 layers.append(Activation(Softmax()))
 
 cost = GeneralizedCost(costfunc=CrossEntropyMulti())
