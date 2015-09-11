@@ -47,10 +47,10 @@ be = gen_backend(backend=args.backend,
                  default_dtype=args.datatype,
                  stochastic_round=False)
 
-(X_train, y_train), (X_test, y_test), nclass = load_cifar10(path=args.data_dir)
+(X_train, y_train), (X_test, y_test), nclass, lshape = load_cifar10(path=args.data_dir)
 
-train = DataIterator(X_train, y_train, nclass=nclass, lshape=(3, 32, 32))
-test = DataIterator(X_test, y_test, nclass=nclass, lshape=(3, 32, 32))
+train = DataIterator(X_train, y_train, nclass=nclass, lshape=lshape)
+test = DataIterator(X_test, y_test, nclass=nclass, lshape=lshape)
 
 init_uni = Uniform(low=-0.1, high=0.1)
 if args.datatype in [np.float32, np.float64]:

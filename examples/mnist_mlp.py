@@ -65,7 +65,8 @@ args = parser.parse_args()
 
 # hyperparameters
 batch_size = 128
-num_epochs = args.epochs
+#num_epochs = args.epochs
+num_epochs = 1
 
 # setup backend
 be = gen_backend(backend=args.backend,
@@ -78,12 +79,12 @@ be = gen_backend(backend=args.backend,
 
 # load up the mnist data set
 # split into train and tests sets
-(X_train, y_train), (X_test, y_test), nclass = load_mnist(path=args.data_dir)
+(X_train, y_train), (X_test, y_test), nclass, lshape = load_mnist(path=args.data_dir)
 
 # setup a training set iterator
-train_set = DataIterator(X_train, y_train, nclass=nclass)
+train_set = DataIterator(X_train, y_train, nclass=nclass, lshape=lshape)
 # setup a validation data set iterator
-valid_set = DataIterator(X_test, y_test, nclass=nclass)
+valid_set = DataIterator(X_test, y_test, nclass=nclass, lshape=lshape)
 
 # setup weight initialization function
 init_norm = Gaussian(loc=0.0, scale=0.01)
@@ -125,6 +126,7 @@ if args.serialize > 0:
     callbacks.add_serialize_callback(checkpoint_schedule, checkpoint_model_path)
 
 # run fit
+import ipdb; ipdb.set_trace()
 mlp.fit(train_set, optimizer=optimizer, num_epochs=num_epochs, cost=cost, callbacks=callbacks)
 
 print('Misclassification error = %.1f%%' % (mlp.eval(valid_set, metric=Misclassification())*100))

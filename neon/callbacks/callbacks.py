@@ -21,6 +21,11 @@ from neon import NervanaObject
 from neon.util.persist import save_obj
 from timeit import default_timer
 
+#from neon.callbacks.deconv import DeconvCallback
+from neon.layers import Convolution
+import numpy as np
+from neon.transforms.activation import Rectlin
+
 logger = logging.getLogger(__name__)
 
 
@@ -81,6 +86,10 @@ class Callbacks(NervanaObject):
         self.add_callback(ValidationCallback(self.callback_data, self.model,
                                              valid_set, epoch_freq),
                           insert_pos=0)
+
+    def add_deconv_callback(self, train_set, epoch_freq):
+        self.add_callback(DeconvCallback(self.callback_data, self.model,
+                                             train_set, epoch_freq))
 
     def add_serialize_callback(self, serialize_schedule, save_path, history=1):
         """
@@ -615,3 +624,84 @@ class EarlyStopCallback(Callback):
                     self.model.finished = True
                     logger.warn('Early stopping function has been triggered with mean_cost %f.'
                                 % (validation_cost))
+
+
+# TODO: This does not actually take in any images right now. All that it does is generate 'fake'
+# activations and send it back via deconv, so we get an idea of what the feature map looks like. We
+# probably want to add in the image set later.  
+
+class DeconvCallback(Callback):
+    def __init__(self, callback_data, model, train_set, epoch_freq=1):
+        super(DeconvCallback, self).__init__(epoch_freq=epoch_freq)
+        self.model = model
+        self.train_set = train_set
+        self.callback_data = callback_data
+
+
+    def on_train_begin(self, epochs):
+        train_set = self.train_set
+        self.H = train_set.H 
+        self.W = train_set.W
+        model = self.model
+        layers = model.layers
+
+        # TODO: Right now, the index into vdata is going to be using the indices that increment
+        # with activations, bias, etc.  
+        for i in range(len(layers)):
+            if not isinstance(layers[i], Convolution):
+                continue
+
+            num_fm = layers[i].convparams['K']
+            for fm in range(num_fm):
+                vdata = self.callback_data.create_dataset("deconv/layer" + str(i) + 
+                                                            "/feature_map" + str(fm), 
+                                                            (3, self.H, self.W)) 
+
+    def on_epoch_end(self, epoch):
+        be = self.model.be
+        model = self.model
+        layers = model.layers
+
+        # Loop over every layer to visualize
+        for i in range(1, len(layers) + 1):
+            count = 0
+            layer_ind = len(layers) - i
+
+            if not isinstance(layers[layer_ind], Convolution):
+                continue 
+
+            num_chn = layers[layer_ind].convparams['K']
+            act_h = layers[layer_ind].outputs.lshape[1]
+            act_w = layers[layer_ind].outputs.lshape[2]
+ 
+            # Loop to visualize every feature map
+            for chn in range(num_chn):
+                activation = np.zeros((num_chn, act_h, act_w, be.bsz))
+                activation[chn, act_h/2, act_w/2, :] = 1
+                activation = NervanaObject.be.array(activation)
+
+                # Loop over the previous layers to perform deconv
+                for l in layers[layer_ind::-1]:
+    
+                    if isinstance(l, Convolution):
+                        # the output shape from conv is the input shape into deconv
+                        # p: conv output height, q: conv output width, k: conv number of output feature
+                        # maps
+                        shape = l.outputs.lshape
+                        k, p, q = shape[0], shape[1], shape[2]
+                        H, W, C = l.convparams['H'], l.convparams['W'], l.convparams['C']
+
+                        out_shape = (C, H, W, be.bsz)
+                    
+                        # ReLU, then deconv-fprop
+                        # The result of Rectlin() is an op-tree, so assign the values to activation
+                        r = Rectlin()
+                        activation[:] = r(activation)
+
+                        out = be.empty(out_shape) 
+                        l.be.bprop_conv(layer=l.nglayer, F=l.W, E=activation, grad_I=out)
+                        activation = out
+
+                self.callback_data["deconv/layer"+str(layer_ind) + "/feature_map" + str(chn)][...] = activation.asnumpyarray()[:,:,:,0]
+
+

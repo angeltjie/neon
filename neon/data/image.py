@@ -169,6 +169,11 @@ class ImgMaster(ImgEndpoint):
 
         self.dev_X = self.be.iobuf(npix, dtype=np.float32)
         self.dev_X.lshape = ishape
+
+        # Add H, W of input data
+        self.H = ishape[1]
+        self.W = ishape[2]
+
         self.dev_XT = self.be.empty(self.dev_X.shape[::-1], dtype=np.uint8)
         self.dev_lbls = self.be.iobuf(1, dtype=np.int32)
         self.dev_Y = self.be.iobuf(self.nclass, dtype=np.float32)
