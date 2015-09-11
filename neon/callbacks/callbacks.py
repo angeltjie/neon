@@ -678,7 +678,7 @@ class DeconvCallback(Callback):
             for chn in range(num_chn):
                 activation = np.zeros((num_chn, act_h, act_w, be.bsz))
                 activation[chn, act_h/2, act_w/2, :] = 1
-                activation = NervanaObject.be.array(activation)
+                activation = be.array(activation)
 
                 # Loop over the previous layers to perform deconv
                 for l in layers[layer_ind::-1]:
