@@ -65,8 +65,7 @@ args = parser.parse_args()
 
 # hyperparameters
 batch_size = 128
-#num_epochs = args.epochs
-num_epochs = 1
+num_epochs = args.epochs
 
 # setup backend
 be = gen_backend(backend=args.backend,
@@ -126,7 +125,6 @@ if args.serialize > 0:
     callbacks.add_serialize_callback(checkpoint_schedule, checkpoint_model_path)
 
 # run fit
-import ipdb; ipdb.set_trace()
 mlp.fit(train_set, optimizer=optimizer, num_epochs=num_epochs, cost=cost, callbacks=callbacks)
 
 print('Misclassification error = %.1f%%' % (mlp.eval(valid_set, metric=Misclassification())*100))

@@ -21,7 +21,6 @@ from neon import NervanaObject
 from neon.util.persist import save_obj
 from timeit import default_timer
 
-#from neon.callbacks.deconv import DeconvCallback
 from neon.layers import Convolution
 import numpy as np
 from neon.transforms.activation import Rectlin
@@ -645,6 +644,9 @@ class DeconvCallback(Callback):
         model = self.model
         layers = model.layers
 
+
+        len_layer_name = len(str(len(layers)))
+
         # TODO: Right now, the index into vdata is going to be using the indices that increment
         # with activations, bias, etc.  
         for i in range(len(layers)):
@@ -652,15 +654,25 @@ class DeconvCallback(Callback):
                 continue
 
             num_fm = layers[i].convparams['K']
+
+            layer_name = "{0:0" + str(len_layer_name) + "}"
+            layer_name = layer_name.format(i)
+            len_fm_name = len(str(num_fm))            
+
             for fm in range(num_fm):
-                vdata = self.callback_data.create_dataset("deconv/layer" + str(i) + 
-                                                            "/feature_map" + str(fm), 
+                fm_name = "{0:0" + str(len_fm_name) + "}"
+                fm_name = fm_name.format(fm)
+                vdata = self.callback_data.create_dataset("deconv/layer" + layer_name + 
+                                                            "/feature_map" + fm_name, 
                                                             (3, self.H, self.W)) 
 
     def on_epoch_end(self, epoch):
         be = self.model.be
         model = self.model
         layers = model.layers
+   
+        # variable to get the right layer name 
+        len_layer_name = len(str(len(layers)))
 
         # Loop over every layer to visualize
         for i in range(1, len(layers) + 1):
@@ -674,12 +686,21 @@ class DeconvCallback(Callback):
             act_h = layers[layer_ind].outputs.lshape[1]
             act_w = layers[layer_ind].outputs.lshape[2]
  
+            # variable to get the right channel name 
+            len_chn_name = len(str(num_chn))
+
+            layer_name = "{0:0" + str(len_layer_name) + "}"
+            layer_name = layer_name.format(layer_ind)
+
             # Loop to visualize every feature map
             for chn in range(num_chn):
                 activation = np.zeros((num_chn, act_h, act_w, be.bsz))
                 activation[chn, act_h/2, act_w/2, :] = 1
                 activation = be.array(activation)
 
+                # Add on zeros before channel number
+                chn_name = "{0:0" + str(len_chn_name) + "}"
+                chn_name = chn_name.format(chn)
                 # Loop over the previous layers to perform deconv
                 for l in layers[layer_ind::-1]:
     
@@ -702,6 +723,6 @@ class DeconvCallback(Callback):
                         l.be.bprop_conv(layer=l.nglayer, F=l.W, E=activation, grad_I=out)
                         activation = out
 
-                self.callback_data["deconv/layer"+str(layer_ind) + "/feature_map" + str(chn)][...] = activation.asnumpyarray()[:,:,:,0]
+                self.callback_data["deconv/layer"+layer_name + "/feature_map" + chn_name][...] = activation.asnumpyarray()[:,:,:,0]
 
 
