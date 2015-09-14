@@ -97,24 +97,46 @@ def h5_cost_data(filename, epoch_axis=True):
 
     return ret
 
-def h5_deconv_data(filename, epoch_axis=True):
+def length_max_ind(layers):
+    currcount = 0
+    count_in_layer = 0
+    for l in layers:
+        count_in_layer = 0
+        for x in l:
+
+            try:
+                x = int(x)
+                if x != 0:
+                    count_in_layer += 1
+                
+            except:
+                continue
+    
+        if count_in_layer > currcount:
+            currcount += 1
+    return currcount
+
+def h5_deconv_data(filename, layer_ind) :
     """
     Read deconv visualization data from hdf5 file.
 
     Returns:
-        list of tuples of (name, x data, y data)
+        list of tuples of (layer_name, fm_name, imgdata)
+        list of the layer names
     """
     ret = list()
     with h5py.File(filename, "r") as f:
 
         deconv = f['deconv']
-        for layer_name, layer in deconv.iteritems():
-            for fm_name, fm in layer[1].iteritems():
-                imgdata = fm[...]
+        layers = deconv.keys()
 
-                ret.append((layer_name, fm_name, name, imgdata))
+        len_max_ind = length_max_ind(layers)
+        layer_key = "{0:0" + str(len_max_ind) + "}"
+        layer_key = layer_key.format(layer_ind)
+        layer_name = 'layer' + layer_key
 
-            ret.append((name, x, y))
+        for fm_name, fm in deconv[layer_name].iteritems():
+            imgdata = fm[...]
+            ret.append((fm_name, imgdata))
 
-    return ret
-
+    return ret 
