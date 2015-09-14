@@ -66,7 +66,6 @@ def convert_rgb_to_bokehrgba(imgdata, dh, dw):
     :param img: (N,M, 3) array (dtype = uint8)
     :return: (K, R, dtype=uint32) array
     """
-    
     if imgdata.dtype != np.uint8:
         raise NotImplementedError
 
@@ -76,13 +75,12 @@ def convert_rgb_to_bokehrgba(imgdata, dh, dw):
     bokeh_img = np.dstack([imgdata, 255 * np.ones(imgdata.shape[:2], np.uint8)])
     # This step is necessary, because we transposed the data before passing it into this function
     # and somehow, that messed with some shape attribute. 
-    print(bokeh_img.shape)
     final_image = bokeh_img.reshape(dh * dw *4).view(np.uint32)
     final_image = final_image.reshape((dh,dw))
 
     return final_image
 
-def deconv_fig(img_data, plot_height, plot_width, img_h, img_w, img_start, img_end, rowlen):
+def deconv_fig(img_data, plot_size, img_h, img_w, img_start=10, img_end=20, figs_per_row=10):
     """
     Generate a figure for each element in deconv_data.
     
@@ -92,36 +90,34 @@ def deconv_fig(img_data, plot_height, plot_width, img_h, img_w, img_start, img_e
         plot_width (int): width of plot
         img_h (int): pixel height of input image
         img_w (int): pixel width of input image
-        img_start (int): the x and y pixel range at which to start plotting
-        img_end (int): the x and y pixel range of the image at which to end  
-        rowlen (int): the number of images to plot in a row
+        img_start (int, optional): the x and y pixel range at which to start plotting
+        img_end (int, optional): the x and y pixel range of the image at which to end  
+        figs_per_row (int, optional): the number of images to plot in a row
     """
     rows = list()
     rowfigs = list()
     shared_range = Range1d(img_start, img_end)
 
-    count = 0
-    for fm_name, data in img_data:
+    for fm_num, (fm_name, data) in enumerate(img_data):
         data = np.transpose(data, (1,2,0))
         rgb_img = deconv_map_to_rgb(data)
         rgb_img = rgb_img.astype(np.uint8)
         final_img = convert_rgb_to_bokehrgba(rgb_img, img_h, img_w)
         
-        fig = figure(title=str(count), title_text_font_size='6pt',
+        fig = figure(title=str(fm_num), title_text_font_size='6pt',
                     x_range=shared_range, y_range=shared_range,
-                    plot_width=plot_width, plot_height = plot_height,
+                    plot_width=plot_size-15, plot_height = plot_size,
                     toolbar_location=None)
         fig.axis.visible = None
 
         fig.image_rgba([final_img], x=[0], y=[0], dw=[img_w], dh=[img_h])
         fig.min_border = 0
 
-        if len(rowfigs) < rowlen:
+        if len(rowfigs) < figs_per_row:
             rowfigs.append(fig)
         else:
             rows.append(hplot(*rowfigs))
             rowfigs = list()
-        count += 1
 
     if len(rowfigs):
         rows.append(hplot(*rowfigs))

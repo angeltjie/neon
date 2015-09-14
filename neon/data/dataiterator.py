@@ -65,9 +65,8 @@ class DataIterator(NervanaObject):
             for xbuf in self.Xbuf:
                 xbuf.lshape = lshape
 
-        # Get the shape of the input data
-        self.H = lshape[1]
-        self.W = lshape[2]
+            # store shape of the input data
+            self.lshape = lshape
 
         assert self.ndata > self.be.bsz
 

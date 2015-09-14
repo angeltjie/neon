@@ -95,8 +95,7 @@ if args.save_path:
     checkpoint_schedule = range(1, args.epochs)
     callbacks.add_serialize_callback(checkpoint_schedule, args.save_path, history=2)
 
-import ipdb; ipdb.set_trace()
-mlp.fit(train, optimizer=opt, num_epochs=1, cost=cost, callbacks=callbacks)
+mlp.fit(train, optimizer=opt, num_epochs=args.epochs, cost=cost, callbacks=callbacks)
 
 test.exit_batch_provider()
 train.exit_batch_provider()

@@ -636,16 +636,10 @@ class DeconvCallback(Callback):
         self.train_set = train_set
         self.callback_data = callback_data
 
-
     def on_train_begin(self, epochs):
-        train_set = self.train_set
-        self.H = train_set.H 
-        self.W = train_set.W
-        model = self.model
-        layers = model.layers
-
-
-        len_layer_name = len(str(len(layers)))
+        H = self.train_set.lshape[1]
+        W = self.train_set.lshape[2]
+        layers = self.model.layers
 
         # TODO: Right now, the index into vdata is going to be using the indices that increment
         # with activations, bias, etc.  
@@ -653,76 +647,53 @@ class DeconvCallback(Callback):
             if not isinstance(layers[i], Convolution):
                 continue
 
+            layer_name = "{0:04}".format(i)
             num_fm = layers[i].convparams['K']
 
-            layer_name = "{0:0" + str(len_layer_name) + "}"
-            layer_name = layer_name.format(i)
-            len_fm_name = len(str(num_fm))            
-
             for fm in range(num_fm):
-                fm_name = "{0:0" + str(len_fm_name) + "}"
-                fm_name = fm_name.format(fm)
-                vdata = self.callback_data.create_dataset("deconv/layer" + layer_name + 
-                                                            "/feature_map" + fm_name, 
-                                                            (3, self.H, self.W)) 
+                fm_name = "{0:04}".format(fm)
+                vdata = self.callback_data.create_dataset("deconv/layer_" + layer_name + "/feature_map_" + fm_name, 
+                                                            (3, H, W)) 
 
     def on_epoch_end(self, epoch):
         be = self.model.be
-        model = self.model
-        layers = model.layers
+        layers = self.model.layers
    
-        # variable to get the right layer name 
-        len_layer_name = len(str(len(layers)))
-
         # Loop over every layer to visualize
         for i in range(1, len(layers) + 1):
-            count = 0
             layer_ind = len(layers) - i
 
             if not isinstance(layers[layer_ind], Convolution):
                 continue 
 
-            num_chn = layers[layer_ind].convparams['K']
+            num_fm = layers[layer_ind].convparams['K']
             act_h = layers[layer_ind].outputs.lshape[1]
             act_w = layers[layer_ind].outputs.lshape[2]
  
-            # variable to get the right channel name 
-            len_chn_name = len(str(num_chn))
-
-            layer_name = "{0:0" + str(len_layer_name) + "}"
-            layer_name = layer_name.format(layer_ind)
+            layer_name = "{0:04}".format(layer_ind) 
 
             # Loop to visualize every feature map
-            for chn in range(num_chn):
-                activation = np.zeros((num_chn, act_h, act_w, be.bsz))
-                activation[chn, act_h/2, act_w/2, :] = 1
+            for fm in range(num_fm):
+                fm_name = "{0:04}".format(fm)
+
+                activation = np.zeros((num_fm, act_h, act_w, be.bsz))
+                activation[fm, act_h/2, act_w/2, :] = 1
                 activation = be.array(activation)
 
-                # Add on zeros before channel number
-                chn_name = "{0:0" + str(len_chn_name) + "}"
-                chn_name = chn_name.format(chn)
                 # Loop over the previous layers to perform deconv
                 for l in layers[layer_ind::-1]:
-    
                     if isinstance(l, Convolution):
-                        # the output shape from conv is the input shape into deconv
-                        # p: conv output height, q: conv output width, k: conv number of output feature
-                        # maps
-                        shape = l.outputs.lshape
-                        k, p, q = shape[0], shape[1], shape[2]
+                        # output shape of deconv is the input shape of conv 
                         H, W, C = l.convparams['H'], l.convparams['W'], l.convparams['C']
-
                         out_shape = (C, H, W, be.bsz)
                     
-                        # ReLU, then deconv-fprop
                         # The result of Rectlin() is an op-tree, so assign the values to activation
                         r = Rectlin()
                         activation[:] = r(activation)
 
+                        # deconv-fprop is conv-bprop
                         out = be.empty(out_shape) 
                         l.be.bprop_conv(layer=l.nglayer, F=l.W, E=activation, grad_I=out)
                         activation = out
 
-                self.callback_data["deconv/layer"+layer_name + "/feature_map" + chn_name][...] = activation.asnumpyarray()[:,:,:,0]
-
-
+                self.callback_data["deconv/layer_"+layer_name + "/feature_map_" + fm_name][...] = activation.asnumpyarray()[:,:,:,0]

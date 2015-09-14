@@ -15,7 +15,6 @@
 import h5py
 import numpy as np
 
-
 def create_minibatch_x(minibatches, minibatch_markers, epoch_axis):
     """
     Helper function to build x axis for data captured per minibatch
@@ -97,46 +96,23 @@ def h5_cost_data(filename, epoch_axis=True):
 
     return ret
 
-def length_max_ind(layers):
-    currcount = 0
-    count_in_layer = 0
-    for l in layers:
-        count_in_layer = 0
-        for x in l:
-
-            try:
-                x = int(x)
-                if x != 0:
-                    count_in_layer += 1
-                
-            except:
-                continue
-    
-        if count_in_layer > currcount:
-            currcount += 1
-    return currcount
-
-def h5_deconv_data(filename, layer_ind) :
+def h5_deconv_data(filename) :
     """
     Read deconv visualization data from hdf5 file.
 
     Returns:
-        list of tuples of (layer_name, fm_name, imgdata)
+        list of tuples of (layer, fm, imgdata)
         list of the layer names
     """
     ret = list()
     with h5py.File(filename, "r") as f:
 
         deconv = f['deconv']
-        layers = deconv.keys()
-
-        len_max_ind = length_max_ind(layers)
-        layer_key = "{0:0" + str(len_max_ind) + "}"
-        layer_key = layer_key.format(layer_ind)
-        layer_name = 'layer' + layer_key
-
-        for fm_name, fm in deconv[layer_name].iteritems():
-            imgdata = fm[...]
-            ret.append((fm_name, imgdata))
-
+        for layer in deconv.keys():
+            layer_data = list()
+            for fm, data in deconv[layer].iteritems():
+                deconv_data = data[...]
+                layer_data.append((fm, deconv_data))
+            ret.append((layer, layer_data))
+  
     return ret 
