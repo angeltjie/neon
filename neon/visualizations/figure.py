@@ -59,12 +59,14 @@ def scale_to_rgb(img):
     Returns: 
         img (ndarray): image array with valid RGB values 
     """
-    minImg = np.min(img)
-    img -= minImg
+    absMax = np.max((abs(img)))
+    minVal = - absMax
+    img -= minVal
     maxImg = np.max(img)
-    if maxImg == 0:
-        maxImg = 1
-    img = img / maxImg * 255
+    maxVal = max(absMax - minVal, maxImg)
+    if maxVal == 0:
+        maxVal = 1
+    img = img / maxVal * 255
     return img
 
 def convert_rgb_to_bokehrgba(img_data, dh, dw):
@@ -112,7 +114,7 @@ def deconv_fig(img_data, plot_size, figs_per_row=10):
         rgb_img = rgb_img.astype(np.uint8)
         final_img = convert_rgb_to_bokehrgba(rgb_img, img_h, img_w)
         
-        fig = figure(title=str(fm_num), title_text_font_size='6pt',
+        fig = figure(title=str(fm_num+1), title_text_font_size='6pt',
                     x_range=[0, img_w], y_range=[0, img_h],
                     plot_width=plot_size-15, plot_height = plot_size,
                     toolbar_location=None)
