@@ -121,7 +121,7 @@ def load_mnist(path=".", normalize=True):
             X_train = X_train / 255.
             X_test = X_test / 255.
 
-    lshape = (1,28,28)
+    lshape = (1, 28, 28)
 
     return (X_train, y_train), (X_test, y_test), 10, lshape
 
@@ -170,7 +170,7 @@ def load_cifar10(path=".", normalize=True):
         X_train = X_train / 255.
         X_test = X_test / 255.
 
-    lshape = (3,32,32)
+    lshape = (3, 32, 32)
     return (X_train, y_train), (X_test, y_test), 10, lshape
 
 

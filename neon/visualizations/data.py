@@ -15,6 +15,7 @@
 import h5py
 import numpy as np
 
+
 def create_minibatch_x(minibatches, minibatch_markers, epoch_axis):
     """
     Helper function to build x axis for data captured per minibatch
@@ -96,12 +97,13 @@ def h5_cost_data(filename, epoch_axis=True):
 
     return ret
 
-def h5_deconv_data(filename) :
+
+def h5_deconv_data(filename):
     """
     Read deconv visualization data from hdf5 file.
 
     Returns:
-        list of lists. Each inner list represents one layer, and consists of 
+        list of lists. Each inner list represents one layer, and consists of
         tuples (fm, deconv_data)
     """
     ret = list()
@@ -115,5 +117,5 @@ def h5_deconv_data(filename) :
                 deconv_data = data[...]
                 layer_data.append((fm, deconv_data))
             ret.append((layer, layer_data))
-  
-    return ret 
+
+    return ret

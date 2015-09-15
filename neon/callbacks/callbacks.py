@@ -87,16 +87,16 @@ class Callbacks(NervanaObject):
                           insert_pos=0)
 
     def add_deconv_callback(self, train_set, epoch_freq):
-        """ 
+        """
         Convenience function to create and add a deconvolution callback. The data can be used for
-        visualization. 
+        visualization.
 
         Arguments:
             train_set (DataIterator): the train dataset to use
-            epoch_freq (int): how often (in epochs) to store deconvolution data. 
+            epoch_freq (int): how often (in epochs) to store deconvolution data.
         """
         self.add_callback(DeconvCallback(self.callback_data, self.model,
-                                             train_set, epoch_freq))
+                                         train_set, epoch_freq))
 
     def add_serialize_callback(self, serialize_schedule, save_path, history=1):
         """
@@ -635,7 +635,7 @@ class EarlyStopCallback(Callback):
 
 # TODO: This does not actually take in any images right now. All that it does is generate 'fake'
 # activations and send it back via deconv, so we get an idea of what the feature map looks like. We
-# probably want to add in the image set later.  
+# probably want to add in the image set later.
 
 class DeconvCallback(Callback):
     """
@@ -644,10 +644,10 @@ class DeconvCallback(Callback):
     Arguments:
         model (Model): model object
         callback_data (HDF5 dataset): shared data between callbacks
-        train_set (DataIterator): the training dataset 
-        epoch_freq (int): how often (in epochs) to store deconvolution data 
+        train_set (DataIterator): the training dataset
+        epoch_freq (int): how often (in epochs) to store deconvolution data
     """
-   def __init__(self, callback_data, model, train_set, epoch_freq=1):
+    def __init__(self, callback_data, model, train_set, epoch_freq=1):
         super(DeconvCallback, self).__init__(epoch_freq=epoch_freq)
         self.model = model
         self.train_set = train_set
@@ -667,25 +667,25 @@ class DeconvCallback(Callback):
 
             for fm in range(num_fm):
                 fm_name = "{0:04}".format(fm)
-                vdata = self.callback_data.create_dataset("deconv/layer_" + layer_name + "/feature_map_" + fm_name, 
-                                                            (3, H, W)) 
+                self.callback_data.create_dataset("deconv/layer_" + layer_name + "/feature_map_"
+                                                  + fm_name, (3, H, W))
 
     def on_epoch_end(self, epoch):
         be = self.model.be
         layers = self.model.layers
-   
+
         # Loop over every layer to visualize
         for i in range(1, len(layers) + 1):
             layer_ind = len(layers) - i
 
             if not isinstance(layers[layer_ind], Convolution):
-                continue 
+                continue
 
             num_fm = layers[layer_ind].convparams['K']
             act_h = layers[layer_ind].outputs.lshape[1]
             act_w = layers[layer_ind].outputs.lshape[2]
- 
-            layer_name = "{0:04}".format(layer_ind) 
+
+            layer_name = "{0:04}".format(layer_ind)
 
             # Loop to visualize every feature map
             for fm in range(num_fm):
@@ -698,17 +698,18 @@ class DeconvCallback(Callback):
                 # Loop over the previous layers to perform deconv
                 for l in layers[layer_ind::-1]:
                     if isinstance(l, Convolution):
-                        # output shape of deconv is the input shape of conv 
+                        # output shape of deconv is the input shape of conv
                         H, W, C = l.convparams['H'], l.convparams['W'], l.convparams['C']
                         out_shape = (C, H, W, be.bsz)
-                    
+
                         # The result of Rectlin() is an op-tree, so assign the values to activation
                         r = Rectlin()
                         activation[:] = r(activation)
 
                         # deconv-fprop is conv-bprop
-                        out = be.empty(out_shape) 
+                        out = be.empty(out_shape)
                         l.be.bprop_conv(layer=l.nglayer, F=l.W, E=activation, grad_I=out)
                         activation = out
 
-                self.callback_data["deconv/layer_"+layer_name + "/feature_map_" + fm_name][...] = activation.asnumpyarray()[:,:,:,0]
+                self.callback_data["deconv/layer_"+layer_name + "/feature_map_"
+                                   + fm_name][...] = activation.asnumpyarray()[:, :, :, 0]

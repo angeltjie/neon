@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from bokeh.plotting import figure, save, output_file
+from bokeh.plotting import figure
 from bokeh.palettes import brewer
 from bokeh.io import vplot, hplot
-from bokeh.models import Range1d
 import numpy as np
+
 
 def x_label(epoch_axis):
     """
@@ -49,15 +49,16 @@ def cost_fig(cost_data, plot_height, plot_width, epoch_axis=True):
         fig.line(x, y, legend=name, color=colors.pop(0), line_width=2)
     return fig
 
+
 def scale_to_rgb(img):
     """
     Convert float data to valid RGB values in the range [0, 255]
 
     Arguments:
-        img (ndarray): the image data        
+        img (ndarray): the image data
 
-    Returns: 
-        img (ndarray): image array with valid RGB values 
+    Returns:
+        img (ndarray): image array with valid RGB values
     """
     absMax = np.max((abs(img)))
     minVal = - absMax
@@ -69,36 +70,38 @@ def scale_to_rgb(img):
     img = img / maxVal * 255
     return img
 
+
 def convert_rgb_to_bokehrgba(img_data, dh, dw):
     """
     Convert RGB image to two-dimensional array of RGBA values (encoded as 32-bit integers)
     (required by Bokeh)
 
-    Arguments:    
+    Arguments:
         img_data: img (ndarray, shape: [N, M, 3], dtype: uint8): image data
         dh: height of image
         dw: width of image
-    
+
     Returns:
-        img (ndarray): 2D image array of RGBA values    
+        img (ndarray): 2D image array of RGBA values
     """
     if img_data.dtype != np.uint8:
         raise NotImplementedError
 
     if img_data.ndim != 3:
         raise NotImplementedError
-            
+
     bokeh_img = np.dstack([img_data, 255 * np.ones(img_data.shape[:2], np.uint8)])
     # This step is necessary, because we transposed the data before passing it into this function
-    # and somehow, that messed with some shape attribute. 
-    final_image = bokeh_img.reshape(dh * dw *4).view(np.uint32)
-    final_image = final_image.reshape((dh,dw))
+    # and somehow, that messed with some shape attribute.
+    final_image = bokeh_img.reshape(dh * dw * 4).view(np.uint32)
+    final_image = final_image.reshape((dh, dw))
 
     return final_image
 
+
 def deconv_fig(img_data, plot_size, figs_per_row=10):
     """
-    Generate a figure for each projection of feature map activations back to pixel space. 
+    Generate a figure for each projection of feature map activations back to pixel space.
 
     Arguments:
         img_data (tuple): feature map name, array with image rgb values
@@ -109,15 +112,15 @@ def deconv_fig(img_data, plot_size, figs_per_row=10):
     rowfigs = list()
     img_h, img_w = img_data[0][1].shape[1], img_data[0][1].shape[2]
     for fm_num, (fm_name, data) in enumerate(img_data):
-        data = np.transpose(data, (1,2,0))
+        data = np.transpose(data, (1, 2, 0))
         rgb_img = scale_to_rgb(data)
         rgb_img = rgb_img.astype(np.uint8)
         final_img = convert_rgb_to_bokehrgba(rgb_img, img_h, img_w)
-        
+
         fig = figure(title=str(fm_num+1), title_text_font_size='6pt',
-                    x_range=[0, img_w], y_range=[0, img_h],
-                    plot_width=plot_size-15, plot_height = plot_size,
-                    toolbar_location=None)
+                     x_range=[0, img_w], y_range=[0, img_h],
+                     plot_width=plot_size-15, plot_height=plot_size,
+                     toolbar_location=None)
         fig.axis.visible = None
 
         fig.image_rgba([final_img], x=[0], y=[0], dw=[img_w], dh=[img_h])
@@ -132,6 +135,6 @@ def deconv_fig(img_data, plot_size, figs_per_row=10):
     if len(rowfigs):
         rows.append(hplot(*rowfigs))
 
-    allfigs = vplot(*rows) 
+    allfigs = vplot(*rows)
 
     return allfigs
