@@ -58,7 +58,7 @@ def deconv_map_to_rgb(img):
     img = img / maxImg * 255
     return img
 
-def convert_rgb_to_bokehrgba(imgdata, dh, dw):
+def convert_rgb_to_bokehrgba(img_data, dh, dw):
     """
     convert RGB image to two-dimensional array of RGBA values (encoded as 32-bit integers)
 
@@ -66,13 +66,13 @@ def convert_rgb_to_bokehrgba(imgdata, dh, dw):
     :param img: (N,M, 3) array (dtype = uint8)
     :return: (K, R, dtype=uint32) array
     """
-    if imgdata.dtype != np.uint8:
+    if img_data.dtype != np.uint8:
         raise NotImplementedError
 
-    if imgdata.ndim != 3:
+    if img_data.ndim != 3:
         raise NotImplementedError
             
-    bokeh_img = np.dstack([imgdata, 255 * np.ones(imgdata.shape[:2], np.uint8)])
+    bokeh_img = np.dstack([img_data, 255 * np.ones(img_data.shape[:2], np.uint8)])
     # This step is necessary, because we transposed the data before passing it into this function
     # and somehow, that messed with some shape attribute. 
     final_image = bokeh_img.reshape(dh * dw *4).view(np.uint32)
@@ -80,7 +80,7 @@ def convert_rgb_to_bokehrgba(imgdata, dh, dw):
 
     return final_image
 
-def deconv_fig(img_data, plot_size, img_h, img_w, img_start=10, img_end=20, figs_per_row=10):
+def deconv_fig(img_data, plot_size, figs_per_row=10):
     """
     Generate a figure for each element in deconv_data.
     
@@ -90,14 +90,11 @@ def deconv_fig(img_data, plot_size, img_h, img_w, img_start=10, img_end=20, figs
         plot_width (int): width of plot
         img_h (int): pixel height of input image
         img_w (int): pixel width of input image
-        img_start (int, optional): the x and y pixel range at which to start plotting
-        img_end (int, optional): the x and y pixel range of the image at which to end  
         figs_per_row (int, optional): the number of images to plot in a row
     """
     rows = list()
     rowfigs = list()
-    shared_range = Range1d(img_start, img_end)
-
+    img_h, img_w = img_data[0][1].shape[1], img_data[0][1].shape[2]
     for fm_num, (fm_name, data) in enumerate(img_data):
         data = np.transpose(data, (1,2,0))
         rgb_img = deconv_map_to_rgb(data)
@@ -105,7 +102,7 @@ def deconv_fig(img_data, plot_size, img_h, img_w, img_start=10, img_end=20, figs
         final_img = convert_rgb_to_bokehrgba(rgb_img, img_h, img_w)
         
         fig = figure(title=str(fm_num), title_text_font_size='6pt',
-                    x_range=shared_range, y_range=shared_range,
+                    x_range=[0, img_w], y_range=[0, img_h],
                     plot_width=plot_size-15, plot_height = plot_size,
                     toolbar_location=None)
         fig.axis.visible = None
@@ -124,10 +121,4 @@ def deconv_fig(img_data, plot_size, img_h, img_w, img_start=10, img_end=20, figs
 
     allfigs = vplot(*rows) 
 
-    # TODO: take out
-    output_file("image.html")
-    save(allfigs)
-
     return allfigs
-
-# TODO: e.g. figs = deconv_fig(ret, 65, 50, 32, 32, 15, 18, 10)

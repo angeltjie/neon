@@ -106,7 +106,8 @@ def h5_deconv_data(filename) :
     """
     ret = list()
     with h5py.File(filename, "r") as f:
-
+        if 'deconv' not in f.keys():
+            return None
         deconv = f['deconv']
         for layer in deconv.keys():
             layer_data = list()
