@@ -101,8 +101,8 @@ def h5_deconv_data(filename) :
     Read deconv visualization data from hdf5 file.
 
     Returns:
-        list of tuples of (layer, fm, imgdata)
-        list of the layer names
+        list of lists. Each inner list represents one layer, and consists of 
+        tuples (fm, deconv_data)
     """
     ret = list()
     with h5py.File(filename, "r") as f:

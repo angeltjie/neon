@@ -66,6 +66,12 @@ def parse_args():
     return parser.parse_args()
 
 def deconv_plot_layers(deconv_data, plot_size=150):
+    """
+    Loop to plot and save the deconvolution visualization for every layer. 
+
+    Arguments:
+        deconv_data ([tuple(string, ndarray)])  : deconvolution data read from h5 file
+    """
     for layer, data in deconv_data:
         allfigs = deconv_fig(data, plot_size, figs_per_row=8)
         plotting.output_file(layer +".html") 
@@ -74,6 +80,7 @@ def deconv_plot_layers(deconv_data, plot_size=150):
 def static_plot(args, plot_height=400, plot_width=600):
     """
     Generate a static html plot with train and validation cost if present in file.
+    Deconvolution plots for each layer will also be generated if deconvolution data is present. 
     """
     filename = args.in_file
 

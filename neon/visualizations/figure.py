@@ -49,7 +49,16 @@ def cost_fig(cost_data, plot_height, plot_width, epoch_axis=True):
         fig.line(x, y, legend=name, color=colors.pop(0), line_width=2)
     return fig
 
-def deconv_map_to_rgb(img):
+def scale_to_rgb(img):
+    """
+    Convert float data to valid RGB values in the range [0, 255]
+
+    Arguments:
+        img (ndarray): the image data        
+
+    Returns: 
+        img (ndarray): image array with valid RGB values 
+    """
     minImg = np.min(img)
     img -= minImg
     maxImg = np.max(img)
@@ -60,11 +69,16 @@ def deconv_map_to_rgb(img):
 
 def convert_rgb_to_bokehrgba(img_data, dh, dw):
     """
-    convert RGB image to two-dimensional array of RGBA values (encoded as 32-bit integers)
+    Convert RGB image to two-dimensional array of RGBA values (encoded as 32-bit integers)
+    (required by Bokeh)
 
-    Bokeh require rbga
-    :param img: (N,M, 3) array (dtype = uint8)
-    :return: (K, R, dtype=uint32) array
+    Arguments:    
+        img_data: img (ndarray, shape: [N, M, 3], dtype: uint8): image data
+        dh: height of image
+        dw: width of image
+    
+    Returns:
+        img (ndarray): 2D image array of RGBA values    
     """
     if img_data.dtype != np.uint8:
         raise NotImplementedError
@@ -82,14 +96,11 @@ def convert_rgb_to_bokehrgba(img_data, dh, dw):
 
 def deconv_fig(img_data, plot_size, figs_per_row=10):
     """
-    Generate a figure for each element in deconv_data.
-    
+    Generate a figure for each projection of feature map activations back to pixel space. 
+
     Arguments:
         img_data (tuple): feature map name, array with image rgb values
-        plot_height (int): height of plot
-        plot_width (int): width of plot
-        img_h (int): pixel height of input image
-        img_w (int): pixel width of input image
+        plot_size (int): height and width of plot
         figs_per_row (int, optional): the number of images to plot in a row
     """
     rows = list()
@@ -97,7 +108,7 @@ def deconv_fig(img_data, plot_size, figs_per_row=10):
     img_h, img_w = img_data[0][1].shape[1], img_data[0][1].shape[2]
     for fm_num, (fm_name, data) in enumerate(img_data):
         data = np.transpose(data, (1,2,0))
-        rgb_img = deconv_map_to_rgb(data)
+        rgb_img = scale_to_rgb(data)
         rgb_img = rgb_img.astype(np.uint8)
         final_img = convert_rgb_to_bokehrgba(rgb_img, img_h, img_w)
         

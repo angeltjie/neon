@@ -87,6 +87,14 @@ class Callbacks(NervanaObject):
                           insert_pos=0)
 
     def add_deconv_callback(self, train_set, epoch_freq):
+        """ 
+        Convenience function to create and add a deconvolution callback. The data can be used for
+        visualization. 
+
+        Arguments:
+            train_set (DataIterator): the train dataset to use
+            epoch_freq (int): how often (in epochs) to store deconvolution data. 
+        """
         self.add_callback(DeconvCallback(self.callback_data, self.model,
                                              train_set, epoch_freq))
 
@@ -316,7 +324,7 @@ class SerializeModelCallback(Callback):
         epoch_freq (int, optional): how often (in epochs) to serialize the
                                    model.  If not specified, we default to
                                    running every epoch.
-        history (Optional[int]): number of checkpoint files to retain, newest
+        history (int, optional): number of checkpoint files to retain, newest
                                  files up to this count are retained.  filename
                                  for the check point files will be
                                  <save_path>_<epoch>.
@@ -524,9 +532,9 @@ class TrainLoggerCallback(Callback):
     Arguments:
         model (Model): model object
 
-        epoch_freq (Optional[int]): how often (in epochs) to log training info.
+        epoch_freq (int, optional): how often (in epochs) to log training info.
                                     Defaults to every 1 epoch.
-        minibatch_freq (Optional[int]): how often (in minibatches) to log
+        minibatch_freq (int, optional): how often (in minibatches) to log
                                         training info, or None to log only on
                                         epoch boundaries.  Defaults to None.
     """
@@ -630,7 +638,16 @@ class EarlyStopCallback(Callback):
 # probably want to add in the image set later.  
 
 class DeconvCallback(Callback):
-    def __init__(self, callback_data, model, train_set, epoch_freq=1):
+    """
+    Callback to store data after projecting activations back to pixel space using deconvolution.
+
+    Arguments:
+        model (Model): model object
+        callback_data (HDF5 dataset): shared data between callbacks
+        train_set (DataIterator): the training dataset 
+        epoch_freq (int): how often (in epochs) to store deconvolution data 
+    """
+   def __init__(self, callback_data, model, train_set, epoch_freq=1):
         super(DeconvCallback, self).__init__(epoch_freq=epoch_freq)
         self.model = model
         self.train_set = train_set
@@ -641,8 +658,6 @@ class DeconvCallback(Callback):
         W = self.train_set.lshape[2]
         layers = self.model.layers
 
-        # TODO: Right now, the index into vdata is going to be using the indices that increment
-        # with activations, bias, etc.  
         for i in range(len(layers)):
             if not isinstance(layers[i], Convolution):
                 continue
