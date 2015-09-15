@@ -74,7 +74,9 @@ def scale_to_rgb(img):
 def convert_rgb_to_bokehrgba(img_data, dh, dw):
     """
     Convert RGB image to two-dimensional array of RGBA values (encoded as 32-bit integers)
-    (required by Bokeh)
+    (required by Bokeh). The functionality is currently not available in Bokeh. 
+    An issue was raised here: https://github.com/bokeh/bokeh/issues/1699 and this function is a 
+    modified version of the suggested solution. 
 
     Arguments:
         img_data: img (ndarray, shape: [N, M, 3], dtype: uint8): image data
