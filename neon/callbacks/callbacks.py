@@ -26,6 +26,7 @@ import numpy as np
 from neon.transforms.activation import Rectlin
 
 logger = logging.getLogger(__name__)
+import time
 
 
 class Callbacks(NervanaObject):
@@ -86,7 +87,7 @@ class Callbacks(NervanaObject):
                                              valid_set, epoch_freq),
                           insert_pos=0)
 
-    def add_deconv_callback(self, train_set, epoch_freq):
+    def add_deconv_callback(self, train_set, valid_set, epoch_freq):
         """
         Convenience function to create and add a deconvolution callback. The data can be used for
         visualization.
@@ -94,9 +95,10 @@ class Callbacks(NervanaObject):
         Arguments:
             train_set (DataIterator): the train dataset to use
             epoch_freq (int): how often (in epochs) to store deconvolution data.
+            valid_set (DataIterator): the validation dataset to use
         """
         self.add_callback(DeconvCallback(self.callback_data, self.model,
-                                         train_set, epoch_freq))
+                                         train_set, valid_set, epoch_freq))
 
     def add_serialize_callback(self, serialize_schedule, save_path, history=1):
         """
@@ -191,9 +193,9 @@ class Callbacks(NervanaObject):
         Arguments:
             epoch (int): index of epoch that is ending
         """
-        for c in self.callbacks:
-            if c.should_fire(epoch, c.epoch_freq):
-                c.on_epoch_end(epoch)
+        for ca in self.callbacks:
+            if ca.should_fire(epoch, ca.epoch_freq):
+                ca.on_epoch_end(epoch)
 
         self.epoch_marker += self.epoch_minibatches
         self.callback_data['time_markers/minibatch'][epoch] = self.epoch_marker
@@ -647,10 +649,11 @@ class DeconvCallback(Callback):
         train_set (DataIterator): the training dataset
         epoch_freq (int): how often (in epochs) to store deconvolution data
     """
-    def __init__(self, callback_data, model, train_set, epoch_freq=1):
+    def __init__(self, callback_data, model, train_set, valid_set, epoch_freq=1):
         super(DeconvCallback, self).__init__(epoch_freq=epoch_freq)
         self.model = model
         self.train_set = train_set
+        self.valid_set = valid_set
         self.callback_data = callback_data
 
     def on_train_begin(self, epochs):
@@ -667,13 +670,92 @@ class DeconvCallback(Callback):
 
             for fm in range(num_fm):
                 fm_name = "{0:04}".format(fm)
+                
+                # This is 3 x num_fm - first element is max1_act, second is img_ind, third is
+                # fm_loc
+                self.callback_data.create_dataset("maxact/layer_" + layer_name + "/feature_map_" 
+                                                  + fm_name, (3, num_fm))
+                self.callback_data.create_data_set(
                 self.callback_data.create_dataset("deconv/layer_" + layer_name + "/feature_map_"
                                                   + fm_name, (3, H, W))
+
+
+    def getActivations(self):
+
+        start = time.time()
+        batch_size = self.be.bsz 
+
+        layers_act = {}
+        #layers_act = self.callback_data
+
+        # For every image in the validation set
+        for batch_ind, (x, t) in enumerate(self.valid_set, 0):
+
+            # Get the activation of each layer
+            for lay_ind, la in enumerate(self.model.layers, 0):
+                x = la.fprop(x, inference=True)
+                # If it is not a convolution layer, I do not care
+
+                if not isinstance(la, Convolution):
+                    continue
+
+                num_fm, H, W = la.outputs.lshape
+
+                if batch_ind == 0:
+                    max1_act = np.zeros(num_fm)
+                    max1_act[:] = -1e8
+                    img_ind = np.zeros(num_fm)
+                    fm_loc = np.zeros(num_fm)
+                    
+                    #layers_act["maxact/layer_" + layer_name + "/feature_map_"
+                               + fm_name[...] = np.array(max1_act, img_ind, fm_loc)
+
+                    layers_act[lay_ind] = (max1_act, img_ind, fm_loc) 
+
+                all_acts = la.outputs.get().reshape((num_fm, H * W, batch_size))
+
+                # If it is conv, I want to find the max activation for every fm
+                # If the max act is larger than the previous max act (for prev. batch), then store it. 
+                for fm in range(num_fm):
+                    # This is all the activations of #batchsize images on one fm
+                    fm_acts = all_acts[fm, :, :]
+
+                    # This is the max fm_act per image
+                    max_acts = np.sort(fm_acts, axis=0)[-1:][::-1][0]
+            
+                    # If the current max activation on the fm is larger than the prev. recorded one, then
+                    # replace it. 
+                    curr_fm_max_act = np.sort(max_acts)[-1:][::-1]
+
+                    max1_act = layers_act[lay_ind][0]
+                    img_ind = layers_act[lay_ind][1]
+                    fm_loc = layers_act[lay_ind][2]
+
+                    if curr_fm_max_act > max1_act[fm]:
+                        max1_act[fm] = curr_fm_max_act 
+
+                        # Update the image ind and fm location
+                        curr_img_ind = np.argsort(max_acts)[-1:][::-1]
+                        img_ind[fm] = curr_img_ind + batch_ind * batch_size
+                        fm_loc[fm] = np.argmax(fm_acts[:,curr_img_ind]) 
+
+                    # TODO: do we take max activation before or after relu? 
+                    # Currently, I'm taking it before relu. so if all negs, 
+                    # I am passing back something different... don't think it 
+                    # matters because I do relu before deconv anyway
+
+                layers_act[lay_ind] = (max1_act, img_ind, fm_loc)
+        end = time.time()
+        print("*********** this took ", end - start) 
+        return layers_act
 
     def on_epoch_end(self, epoch):
         be = self.model.be
         layers = self.model.layers
-
+        
+        # Get the activations
+        layers_act = self.getActivations() 
+ 
         # Loop over every layer to visualize
         for i in range(1, len(layers) + 1):
             layer_ind = len(layers) - i
@@ -684,15 +766,19 @@ class DeconvCallback(Callback):
             num_fm = layers[layer_ind].convparams['K']
             act_h = layers[layer_ind].outputs.lshape[1]
             act_w = layers[layer_ind].outputs.lshape[2]
+            act_size = act_h * act_w
 
             layer_name = "{0:04}".format(layer_ind)
+            max1_act, img_ind, fm_loc = layers_act[layer_ind]
 
             # Loop to visualize every feature map
             for fm in range(num_fm):
                 fm_name = "{0:04}".format(fm)
 
-                activation = np.zeros((num_fm, act_h, act_w, be.bsz))
-                activation[fm, act_h/2, act_w/2, :] = 1
+                activation = np.zeros((num_fm, act_size, be.bsz))
+
+                # Set the max activation at the correct feature map location
+                activation[fm, fm_loc[fm], :] = max1_act[fm] 
                 activation = be.array(activation)
 
                 # Loop over the previous layers to perform deconv
