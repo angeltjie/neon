@@ -685,7 +685,6 @@ class DeconvCallback(Callback):
         start = time.time()
         batch_size = self.be.bsz 
 
-        layers_act = {}
         #layers_act = self.callback_data
 
         # For every image in the validation set
@@ -708,7 +707,7 @@ class DeconvCallback(Callback):
                     fm_loc = np.zeros(num_fm)
                     
                     #layers_act["maxact/layer_" + layer_name + "/feature_map_"
-                               + fm_name[...] = np.array(max1_act, img_ind, fm_loc)
+                    #           + fm_name[...] = np.array(max1_act, img_ind, fm_loc)
 
                     layers_act[lay_ind] = (max1_act, img_ind, fm_loc) 
 
