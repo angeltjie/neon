@@ -668,14 +668,12 @@ class DeconvCallback(Callback):
             layer_name = "{0:04}".format(i)
             num_fm = layers[i].convparams['K']
 
+            # This is 3 x num_fm - first element is max1_act, second is img_ind, third is fm_loc
+            self.callback_data.create_dataset("maxact/layer_" + layer_name, (3,num_fm))
+
             for fm in range(num_fm):
                 fm_name = "{0:04}".format(fm)
-                
-                # This is 3 x num_fm - first element is max1_act, second is img_ind, third is
-                # fm_loc
-                self.callback_data.create_dataset("maxact/layer_" + layer_name + "/feature_map_" 
-                                                  + fm_name, (3, num_fm))
-                self.callback_data.create_data_set(
+                 
                 self.callback_data.create_dataset("deconv/layer_" + layer_name + "/feature_map_"
                                                   + fm_name, (3, H, W))
 
@@ -685,13 +683,20 @@ class DeconvCallback(Callback):
         start = time.time()
         batch_size = self.be.bsz 
 
-        #layers_act = self.callback_data
+        layers_act = self.callback_data["maxact"]
+
+        # Initialize the max activations 
+        for lay in layers_act.iterkeys():
+            layers_act[lay][0] = -1e8
 
         # For every image in the validation set
         for batch_ind, (x, t) in enumerate(self.valid_set, 0):
 
             # Get the activation of each layer
             for lay_ind, la in enumerate(self.model.layers, 0):
+
+                layer_name = "{0:04}".format(lay_ind)
+
                 x = la.fprop(x, inference=True)
                 # If it is not a convolution layer, I do not care
 
@@ -700,22 +705,13 @@ class DeconvCallback(Callback):
 
                 num_fm, H, W = la.outputs.lshape
 
-                if batch_ind == 0:
-                    max1_act = np.zeros(num_fm)
-                    max1_act[:] = -1e8
-                    img_ind = np.zeros(num_fm)
-                    fm_loc = np.zeros(num_fm)
-                    
-                    #layers_act["maxact/layer_" + layer_name + "/feature_map_"
-                    #           + fm_name[...] = np.array(max1_act, img_ind, fm_loc)
-
-                    layers_act[lay_ind] = (max1_act, img_ind, fm_loc) 
-
                 all_acts = la.outputs.get().reshape((num_fm, H * W, batch_size))
 
                 # If it is conv, I want to find the max activation for every fm
                 # If the max act is larger than the previous max act (for prev. batch), then store it. 
                 for fm in range(num_fm):
+                    fm_name = "{0:04}".format(fm)
+
                     # This is all the activations of #batchsize images on one fm
                     fm_acts = all_acts[fm, :, :]
 
@@ -725,25 +721,19 @@ class DeconvCallback(Callback):
                     # If the current max activation on the fm is larger than the prev. recorded one, then
                     # replace it. 
                     curr_fm_max_act = np.sort(max_acts)[-1:][::-1]
-
-                    max1_act = layers_act[lay_ind][0]
-                    img_ind = layers_act[lay_ind][1]
-                    fm_loc = layers_act[lay_ind][2]
-
-                    if curr_fm_max_act > max1_act[fm]:
-                        max1_act[fm] = curr_fm_max_act 
+                    
+                    if curr_fm_max_act > layers_act["layer_" + layer_name][0, fm]:
+                        # This updates the max activation value
+                        layers_act["layer_" + layer_name][0,fm] = curr_fm_max_act 
 
                         # Update the image ind and fm location
                         curr_img_ind = np.argsort(max_acts)[-1:][::-1]
-                        img_ind[fm] = curr_img_ind + batch_ind * batch_size
-                        fm_loc[fm] = np.argmax(fm_acts[:,curr_img_ind]) 
+                        # This is the image ind
+                        layers_act["layer_" + layer_name][1,fm] = curr_img_ind + batch_ind * batch_size
+                        # This gives me the fm_loc
+                        layers_act["layer_" + layer_name][2,fm] = np.argmax(fm_acts[:,curr_img_ind]) 
 
-                    # TODO: do we take max activation before or after relu? 
-                    # Currently, I'm taking it before relu. so if all negs, 
-                    # I am passing back something different... don't think it 
-                    # matters because I do relu before deconv anyway
-
-                layers_act[lay_ind] = (max1_act, img_ind, fm_loc)
+#                layers_act["layer_" + layer_name] = np.asarray([max1_act, img_ind, fm_loc])
         end = time.time()
         print("*********** this took ", end - start) 
         return layers_act
@@ -768,7 +758,7 @@ class DeconvCallback(Callback):
             act_size = act_h * act_w
 
             layer_name = "{0:04}".format(layer_ind)
-            max1_act, img_ind, fm_loc = layers_act[layer_ind]
+            max1_act, img_ind, fm_loc = layers_act["layer_" + layer_name]
 
             # Loop to visualize every feature map
             for fm in range(num_fm):
