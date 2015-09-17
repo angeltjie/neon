@@ -662,7 +662,11 @@ class DeconvCallback(Callback):
         H = self.train_set.lshape[1]
         W = self.train_set.lshape[2]
         layers = self.model.layers
-        self.callback_data.create_group("maxact_imgdata")
+        deconv_data = self.callback_data.create_group("deconv")
+        deconv_data.create_group("img_data")
+        deconv_data.create_group("act_data")
+        act_data = deconv_data["act_data"]
+
 
         for i in range(len(layers)):
             if not isinstance(layers[i], Convolution):
@@ -671,22 +675,43 @@ class DeconvCallback(Callback):
             layer_name = "{0:04}".format(i)
             num_fm = layers[i].convparams['K']
 
-            # This is 3 x num_fm - first element is max1_act, second is img_ind, third is fm_loc
-            self.callback_data.create_dataset("maxact/layer_" + layer_name + "/max_act_val",
-(num_fm,))
-            self.callback_data.create_dataset("maxact/layer_" + layer_name + "/img_ind", (num_fm,))
-            self.callback_data.create_dataset("maxact/layer_" + layer_name + "/fm_loc", (num_fm,))
-            self.callback_data.create_dataset("maxact/layer_" + layer_name + "/point_to_im",
-(num_fm,))
 
             for fm in range(num_fm):
                 fm_name = "{0:04}".format(fm)
                  
-                self.callback_data.create_dataset("deconv/layer_" + layer_name + "/feature_map_"
-                                                  + fm_name, (3, H, W))
+                act_data.create_dataset("layer_" + layer_name + "/fmap_"
+                                                  + fm_name + "/plot", (3, H, W))
+                act_data.create_dataset("layer_" + layer_name + "/fmap_" + fm_name + 
+"/max_act_val", (1,))
+                act_data.create_dataset("layer_" + layer_name + "/fmap_" + fm_name + "/img_ind", (1,),
+dtype='i64')
+                act_data.create_dataset("layer_" + layer_name + "/fmap_" + fm_name + "/fm_loc", (1,),
+dtype='i64')
 
-    def get_Layer_Activations(self, x, batch_ind):
+
+
+    def get_activations(self):
+
+        start = time.time()
+        act_data = self.callback_data["deconv/act_data"]
+
+        for lay in act_data.iterkeys():
+            for fm in act_data[lay].iterkeys():
+                act_data[lay][fm]["max_act_val"][...] = -1e8
+
+        # For every image in the validation set
+        for batch_ind, (x, t) in enumerate(self.valid_set, 0):
+
+            self.get_layer_acts(x, batch_ind)
+
+        self.store_images()
+        end = time.time()
+        print ("******* getting acts and storing images took", end-start)
+
+    
+    def get_layer_acts(self, x, batch_ind):
         batch_size = self.be.bsz
+
         # Get the activation of each layer
         for lay_ind, la in enumerate(self.model.layers, 0):
 
@@ -696,7 +721,8 @@ class DeconvCallback(Callback):
                 continue
 
             layer_name = "{0:04}".format(lay_ind)
-            layer_data = self.callback_data["maxact/layer_" + layer_name]
+
+            layer_data = self.callback_data["deconv/act_data/layer_" + layer_name]
 
             num_fm, H, W = la.outputs.lshape
 
@@ -704,9 +730,11 @@ class DeconvCallback(Callback):
 
             for fm in range(num_fm):
                 fm_name = "{0:04}".format(fm)
+                max_act_val = layer_data["fmap_" + fm_name + "/max_act_val"]
+                img_ind = layer_data["fmap_" + fm_name + "/img_ind"]
+                fm_loc = layer_data["fmap_" + fm_name + "/fm_loc"]
 
                 # This is all the activations of #batchsize images on one fm
-                # dim = (fm_size,  batch_size)
                 fm_acts = all_acts[fm, :, :]
 
                 # TODO: maybe replace with np.argpartition to speed up
@@ -721,58 +749,53 @@ class DeconvCallback(Callback):
                 # TODO: just argsort once, and then index in to see if it is larger
                 curr_fm_max_act = np.sort(max_acts)[-1:][::-1]
             
-                if curr_fm_max_act > layer_data["max_act_val"][fm]:
-                    layer_data["max_act_val"][fm] = curr_fm_max_act 
+                if curr_fm_max_act > max_act_val:
+                    max_act_val[...] = curr_fm_max_act 
 
                     curr_img_ind = np.argsort(max_acts)[-1:][::-1]
-                    layer_data["img_ind"][fm] = curr_img_ind + batch_ind * batch_size
-                    layer_data["fm_loc"][fm] = np.argmax(fm_acts[:,curr_img_ind]) 
-
-
-            self.store_images(layer_data["img_ind"])
-
-
-    def getActivations(self):
-
-        layers_act = self.callback_data["maxact"]
-
-        for lay in layers_act.iterkeys():
-            layers_act[lay + "/max_act_val"][...] = -1e8
-
-        # For every image in the validation set
-        for batch_ind, (x, t) in enumerate(self.valid_set, 0):
-
-            self.get_Layer_Activations(x, batch_ind)
-
-            # TODO: img_data is a group created above
-            # if img_idx not in img_data:
-            #    img_data.create_dataset(img_idx, img_shape)
-            #    img_data[img_idx][...] = ___
-
-        return layers_act
+                    img_ind[...] = curr_img_ind + batch_ind * batch_size
+                    fm_loc[...] = np.argmax(fm_acts[:,curr_img_ind]) 
+        return
 
     def store_images(self):
-        layers_act = self.callback_data["maxact"]
-        img_data = self.callback_data["maxact_imgdata"]   
-        
-    
-    def visualize_layer(self, num_fm, act_size, layer_ind, layers_act):
+        img_data_group = self.callback_data["deconv/img_data"]
+        img_ind = self.get_img_indices()
+        images = self.valid_set.Xdev[0]
+        img_size = images.shape[1]
+
+        for ind in img_ind:
+            key = str(ind)
+            if key not in img_data_group:
+                img_data_group.create_dataset(key, (img_size,))
+                img_data_group[key][...] = images[ind].get()
+        return 
+
+    def get_img_indices(self):
+        img_ind = list()
+        act_data = self.callback_data["deconv/act_data"]
+        for lay in act_data.iterkeys():
+            for fm in act_data[lay].iterkeys():
+                img_ind.append(act_data[lay][fm]["img_ind"][...][0]) 
+        return img_ind
+
+    def visualize_layer(self, num_fm, act_size, layer_ind):
         be = self.model.be
         layer_name = "{0:04}".format(layer_ind)
-        layer_data = layers_act["layer_" + layer_name]
-        max_act = layer_data["max_act_val"]
-        img_ind = layer_data["img_ind"]
-        fm_loc = layer_data["fm_loc"]
+        layer_data = self.callback_data["deconv/act_data/layer_" + layer_name]
         layers = self.model.layers
 
         # Loop to visualize every feature map
         for fm in range(num_fm):
             fm_name = "{0:04}".format(fm)
+            max_act_val = layer_data["fmap_" + fm_name + "/max_act_val"]
+            img_ind = layer_data["fmap_" + fm_name + "/img_ind"]
+            fm_loc = layer_data["fmap_" + fm_name + "/fm_loc"]
+            plot = layer_data["fmap_" + fm_name + "/plot"] 
 
             activation = np.zeros((num_fm, act_size, be.bsz))
 
             # Set the max activation at the correct feature map location
-            activation[fm, fm_loc[fm], :] = max_act[fm] 
+            activation[fm, fm_loc, :] = max_act_val 
             activation = be.array(activation)
 
             # Loop over the previous layers to perform deconv
@@ -788,17 +811,14 @@ class DeconvCallback(Callback):
                     out = be.empty(out_shape)
                     l.be.bprop_conv(layer=l.nglayer, F=l.W, E=activation, grad_I=out)
                     activation = out
-
-            self.callback_data["deconv/layer_"+layer_name + "/feature_map_"
-                               + fm_name][...] = activation.asnumpyarray()[:, :, :, 0]
-
+            plot[...] = activation.asnumpyarray()[:, :, :, 0] 
+        return
 
     def on_epoch_end(self, epoch):
-        #be = self.model.be
         layers = self.model.layers
         
         # Get the activations
-        layers_act = self.getActivations() 
+        self.get_activations() 
  
         # Loop over every layer to visualize
         for i in range(1, len(layers) + 1):
@@ -812,4 +832,5 @@ class DeconvCallback(Callback):
             act_w = layers[layer_ind].outputs.lshape[2]
             act_size = act_h * act_w
 
-            self.visualize_layer(num_fm, act_size, layer_ind, layers_act)
+            self.visualize_layer(num_fm, actsize, layer_ind)
+        return
