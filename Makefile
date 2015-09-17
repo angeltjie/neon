@@ -14,6 +14,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 # Top-level control of the building/installation/cleaning of various targets
+#
+# set empty to prevent any implicit rules from firing.
+.SUFFIXES:
 
 # where our installed python packages will live
 VIRTUALENV_DIR := .venv
@@ -25,13 +28,12 @@ RELEASE := $(strip $(shell grep '^VERSION *=' setup.py | cut -f 2 -d '=' \
 	                         | tr -d "\'"))
 
 # basic check to see if any CUDA compatible GPU is installed
+# set this to false to turn off GPU related functionality
 HAS_GPU := $(shell nvcc --version > /dev/null 2>&1 && echo true)
 
-# lazily evaluated determination of CUDA GPU capabilities
-CUDA_COMPUTE_CAPABILITY = $(shell neon/backends/util/check_gpu.py)
-COMPUTE_MAJOR = $(shell echo $(CUDA_COMPUTE_CAPABILITY) | cut -f1 -d.)
-MAXWELL_MAJOR := 5
-HAS_MAXWELL_GPU = $(shell [ $(COMPUTE_MAJOR) -ge $(MAXWELL_MAJOR) ] && echo true)
+# set this to true to install visualization dependencies and functionality
+# (off by default)
+VIS :=
 
 # style checking related
 STYLE_CHECK_OPTS :=
@@ -48,13 +50,10 @@ DOC_DIR := doc
 DOC_PUB_RELEASE_PATH := $(DOC_PUB_PATH)/$(RELEASE)
 
 # Maxwell assembler project related
-MAXAS_PLIB := PERL5LIB=$(VIRTUALENV_DIR)/share/perl/5.18.2
 MAXAS_SRC_URL := https://github.com/NervanaSystems/maxas.git
 MAXAS_DL_DIR := $(VIRTUALENV_DIR)/maxas
 MAXAS := $(VIRTUALENV_DIR)/bin/maxas.pl
-MAXAS_VER_FILE := $(VIRTUALENV_DIR)/maxas/lib/MaxAs/MaxAs.pm
-MAXAS_INSTALLED_VERSION = $(shell test -f $(ACTIVATE) && . $(ACTIVATE) && $(MAXAS_PLIB) $(MAXAS) --version)
-MAXAS_AVAIL_VERSION = $(shell test -f $(MAXAS_VER_FILE) && grep VERSION $(MAXAS_VER_FILE) | cut -f2 -d= | tr -d "'; ")
+MAXAS_PLIB := PERL5LIB=$(VIRTUALENV_DIR)/maxas/lib
 
 # GPU Kernel compilation related
 KERNEL_BUILDER := neon/backends/make_kernels.py
@@ -65,8 +64,8 @@ KERNEL_BUILDER_CLEAN_OPTS := --clean
 IMAGESET_DECODER := neon/data/imageset_decoder.so
 
 .PHONY: default env maxas kernels sysinstall sysuninstall clean_py clean_maxas \
-	      clean_so clean_kernels clean test coverage style lint check doc html \
-				release examples serialize_check
+	      clean_so clean_kernels clean test coverage style lint check \
+	      doc html release examples serialize_check
 
 default: env
 
@@ -76,8 +75,14 @@ $(ACTIVATE): requirements.txt gpu_requirements.txt vis_requirements.txt
 	@echo "Updating virtualenv dependencies in: $(VIRTUALENV_DIR)..."
 	@test -d $(VIRTUALENV_DIR) || $(VIRTUALENV_EXE) $(VIRTUALENV_DIR)
 	@. $(ACTIVATE); pip install -U pip
+	@# cython added separately due to h5py dependency ordering bug.  See:
+	@# https://github.com/h5py/h5py/issues/535
+	@. $(ACTIVATE); pip install cython==0.23.1
 	@. $(ACTIVATE); pip install -r requirements.txt
+ifeq ($(VIS), true)
+	@echo "Updating visualization related dependecies in $(VIRTUALENV_DIR)..."
 	@. $(ACTIVATE); pip install -r vis_requirements.txt
+endif
 	@echo
 ifeq ($(HAS_GPU), true)
 	@echo "Updating GPU dependencies in $(VIRTUALENV_DIR)..."
@@ -95,29 +100,17 @@ endif
 	@echo
 
 maxas: $(ACTIVATE) $(MAXAS_DL_DIR)
-ifeq ($(HAS_MAXWELL_GPU), true)
+ifeq ($(HAS_GPU), true)
 	@cd $(MAXAS_DL_DIR) && git pull >/dev/null 2>&1
 	@test -f $(MAXAS) ||\
 		{ echo "Installing maxas..." &&\
-		  cd $(MAXAS_DL_DIR) &&\
-		  perl Makefile.PL PREFIX=.. &&\
-		  make install ;\
-		  if [ $$? != 0 ] ; then \
-			  echo "Problems installing maxas"; exit 1 ;\
-		  fi }
-  ifneq ($(MAXAS_INSTALLED_VERSION),$(MAXAS_AVAIL_VERSION))
-		@echo "Updating maxas installation from $(MAXAS_INSTALLED_VERSION) to $(MAXAS_AVAIL_VERSION) ..."
-		cd $(MAXAS_DL_DIR) &&\
-		perl Makefile.PL PREFIX=.. &&\
-		make install ;\
-		  if [ $$? != 0 ] ; then \
-			  echo "Problems updating maxas"; exit 1 ;\
-		  fi
-  endif
+		  ln -s ../maxas/bin/maxas.pl $(MAXAS) ;\
+		  echo "";\
+		}
 endif
 
 $(MAXAS_DL_DIR):
-ifeq ($(HAS_MAXWELL_GPU), true)
+ifeq ($(HAS_GPU), true)
 	@test -d $(MAXAS_DL_DIR) ||\
 		{ echo "Cloning maxas repo..." ;\
 		  git clone $(MAXAS_SRC_URL) $(MAXAS_DL_DIR) ;\
@@ -126,7 +119,7 @@ ifeq ($(HAS_MAXWELL_GPU), true)
 endif
 
 kernels: $(ACTIVATE) maxas
-ifeq ($(HAS_MAXWELL_GPU), true)
+ifeq ($(HAS_GPU), true)
 	@. $(ACTIVATE); $(MAXAS_PLIB) $(KERNEL_BUILDER) $(KERNEL_BUILDER_BUILD_OPTS)
 	@echo
 endif
@@ -148,8 +141,13 @@ endif
 sysinstall: env
 	@echo "Installing neon system wide..."
 	@pip install -U pip
+	@# cython added separately due to h5py dependency ordering bug.  See:
+	@# https://github.com/h5py/h5py/issues/535
+	@pip install cython==0.23.1
 	@pip install -r requirements.txt
+ifeq ($(VIS), true)
 	@pip install -r vis_requirements.txt
+endif
 ifeq ($(HAS_GPU), true)
 	@pip install -r gpu_requirements.txt
 endif
@@ -172,14 +170,15 @@ clean_so:
 	@echo
 
 clean_maxas:
-ifeq ($(HAS_MAXWELL_GPU), true)
+ifeq ($(HAS_GPU), true)
 	@echo "Cleaning maxas installation and repo files..."
+	@rm -f $(MAXAS)
 	@rm -rf $(MAXAS_DL_DIR)
 	@echo
 endif
 
 clean_kernels:
-ifeq ($(HAS_MAXWELL_GPU), true)
+ifeq ($(HAS_GPU), true)
 	@echo "Cleaning compiled gpu kernel files..."
 	@test -f $(ACTIVATE) && . $(ACTIVATE); $(KERNEL_BUILDER) $(KERNEL_BUILDER_CLEAN_OPTS)
 	@echo

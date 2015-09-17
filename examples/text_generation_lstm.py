@@ -18,19 +18,18 @@ Example that trains an LSTM or GRU based recurrent networks.
 The dataset uses Penn Treebank dataset parsing on character-level.
 
 Reference:
-    Generating sequences with recurrent neural networks `[Grave2014]`_
-.. _[Grave2014]: http://arxiv.org/pdf/1308.0850.pdf
+    Generating sequences with recurrent neural networks `[Graves2014]`_
+.. _[Graves2014]: http://arxiv.org/pdf/1308.0850.pdf
 """
-import os
 import numpy as np
 
 from neon.backends import gen_backend
 from neon.data import Text
 from neon.data import load_text
 from neon.initializers import Uniform
-from neon.layers import GeneralizedCost, LSTM, Affine, Recurrent, GRU
+from neon.layers import GeneralizedCost, LSTM, Affine
 from neon.models import Model
-from neon.optimizers import RMSProp, GradientDescentMomentum
+from neon.optimizers import RMSProp
 from neon.transforms import Logistic, Tanh, Softmax, CrossEntropyMulti
 from neon.callbacks.callbacks import Callbacks
 from neon.util.argparser import NeonArgparser
@@ -89,6 +88,7 @@ callbacks.add_serialize_callback(1, args.save_path)
 # fit and validate
 model.fit(train_set, optimizer=optimizer, num_epochs=num_epochs, cost=cost, callbacks=callbacks)
 
+
 def sample(prob):
     """
     Sample index from probability distribution
@@ -125,7 +125,7 @@ for i in range(num_predict):
     text.append(train_set.index_to_token[int(pred)])
 
     x.fill(0)
-    x[pred, 0] = 1
+    x[int(pred), 0] = 1
     y = model.fprop(x)
 
 print ''.join(seed_tokens + text)

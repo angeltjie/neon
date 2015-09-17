@@ -17,6 +17,7 @@ from neon import NervanaObject
 from neon.transforms import CrossEntropyBinary, Logistic
 from neon.util.persist import load_obj
 from neon.layers import Merge, Activation
+import numpy as np
 
 
 class Model(NervanaObject):
@@ -194,7 +195,7 @@ class Model(NervanaObject):
             datasets (iterable): dataset to evaluate on.
             metric (Cost): what function to evaluate dataset on.
         """
-        running_error = 0.0
+        running_error = np.zeros((len(metric.metric_names)), dtype=np.float32)
         nprocessed = 0
         dataset.reset()
         for x, t in dataset:
@@ -203,10 +204,67 @@ class Model(NervanaObject):
             # This logic is for handling partial batch sizes at the end of the dataset
             bsz = min(dataset.ndata - nprocessed, self.be.bsz)
             metric(x, t)
-            running_error += metric.outputs.get()[:, :bsz].sum()
+            running_error += metric.outputs.get()[:, :bsz].sum(axis=1)
             nprocessed += bsz
         running_error /= nprocessed
         return running_error
+
+    def predict(self, dataset):
+        """
+        Generate predictions for the dataset
+
+        Arguments:
+            dataset (iterable): Dataset iterator to perform fit on
+
+        Returns:
+            Tensor: the output of the final layer for the entire Dataset
+        """
+        nprocessed = 0   # Keep track of how much of dataset we've seen
+        dataset.reset()  # Move "pointer" back to beginning of dataset
+
+        # Decide what the output size will be based on status of dataset
+        if hasattr(dataset, "ybuf"):
+            # This encompasses case where dataset is instance of dataiterator
+            if dataset.ybuf is None:
+                outsize = dataset.Xbuf[0].shape
+            else:
+                outsize = dataset.ybuf.shape[0]
+        else:
+            # Assume we're dealing with an instance of ImgMaster
+            # or a sequential dataset, e.g. Text
+            if isinstance(dataset.nclass, dict):
+                outsize = dataset.nclass.size
+            else:
+                outsize = dataset.nclass
+
+        # Initialize a backend tensor to hold the predictions
+        Ypred = self.be.empty((dataset.ndata, outsize))
+        if hasattr(dataset, "seq_length"):
+            # for sequence dataset, the output of the network is different
+            # needs to consider what was the continuous sequence order
+            b = self.be.bsz
+            s = dataset.seq_length
+            f = dataset.nclass
+            n = dataset.nbatches
+
+            # import ipdb; ipdb.set_trace()
+            Ypred_v = Ypred.reshape(b, n, s, f)
+            Ypred_v_n = [Ypred_v[:, i] for i in range(n)]
+            xt = self.be.empty((b*s, f))
+            xt_v = xt.reshape(b, s, f)
+            for mb_idx, (x, t) in enumerate(dataset):
+                x = self.fprop(x, inference=True)
+                xt.copy(x.T)
+                for ib in range(b):
+                    Ypred_v_n[mb_idx][ib, :] = xt_v[ib, :]
+        else:
+            # Fprop one minibatch at a time to generate predictions
+            for x, t in dataset:
+                x = self.fprop(x, inference=True)
+                bsz = min(dataset.ndata - nprocessed, self.be.bsz)
+                Ypred[nprocessed:nprocessed+bsz] = x[:, :bsz].T
+                nprocessed += bsz
+        return Ypred
 
     def get_description(self):
         """
