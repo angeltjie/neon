@@ -649,17 +649,20 @@ class DeconvCallback(Callback):
         train_set (DataIterator): the training dataset
         epoch_freq (int): how often (in epochs) to store deconvolution data
     """
-    def __init__(self, callback_data, model, train_set, valid_set, epoch_freq=1):
+    def __init__(self, callback_data, model, train_set, valid_set, epoch_freq=1, history=1):
         super(DeconvCallback, self).__init__(epoch_freq=epoch_freq)
         self.model = model
         self.train_set = train_set
         self.valid_set = valid_set
         self.callback_data = callback_data
+        self.history = history
+        self.checkpoint_files = deque()
 
     def on_train_begin(self, epochs):
         H = self.train_set.lshape[1]
         W = self.train_set.lshape[2]
         layers = self.model.layers
+        self.callback_data.create_group("maxact_imgdata")
 
         for i in range(len(layers)):
             if not isinstance(layers[i], Convolution):
@@ -669,7 +672,12 @@ class DeconvCallback(Callback):
             num_fm = layers[i].convparams['K']
 
             # This is 3 x num_fm - first element is max1_act, second is img_ind, third is fm_loc
-            self.callback_data.create_dataset("maxact/layer_" + layer_name, (3,num_fm))
+            self.callback_data.create_dataset("maxact/layer_" + layer_name + "/max_act_val",
+(num_fm,))
+            self.callback_data.create_dataset("maxact/layer_" + layer_name + "/img_ind", (num_fm,))
+            self.callback_data.create_dataset("maxact/layer_" + layer_name + "/fm_loc", (num_fm,))
+            self.callback_data.create_dataset("maxact/layer_" + layer_name + "/point_to_im",
+(num_fm,))
 
             for fm in range(num_fm):
                 fm_name = "{0:04}".format(fm)
@@ -677,66 +685,80 @@ class DeconvCallback(Callback):
                 self.callback_data.create_dataset("deconv/layer_" + layer_name + "/feature_map_"
                                                   + fm_name, (3, H, W))
 
+    def get_Layer_Activations(self, x, batch_ind):
+        batch_size = self.be.bsz
+        # Get the activation of each layer
+        for lay_ind, la in enumerate(self.model.layers, 0):
+
+            x = la.fprop(x, inference=True)
+
+            if not isinstance(la, Convolution):
+                continue
+
+            layer_name = "{0:04}".format(lay_ind)
+            layer_data = self.callback_data["maxact/layer_" + layer_name]
+
+            num_fm, H, W = la.outputs.lshape
+
+            all_acts = la.outputs.get().reshape((num_fm, H * W, batch_size))
+
+            for fm in range(num_fm):
+                fm_name = "{0:04}".format(fm)
+
+                # This is all the activations of #batchsize images on one fm
+                # dim = (fm_size,  batch_size)
+                fm_acts = all_acts[fm, :, :]
+
+                # TODO: maybe replace with np.argpartition to speed up
+
+                # maximum activation by each image 
+                max_acts = np.sort(fm_acts, axis=0)[-1:][::-1][0]
+       
+                # If the current max activation on the fm is larger than the prev. recorded one, then
+                # replace it. 
+
+                # TODO: modify this to get k largest
+                # TODO: just argsort once, and then index in to see if it is larger
+                curr_fm_max_act = np.sort(max_acts)[-1:][::-1]
+            
+                if curr_fm_max_act > layer_data["max_act_val"][fm]:
+                    layer_data["max_act_val"][fm] = curr_fm_max_act 
+
+                    curr_img_ind = np.argsort(max_acts)[-1:][::-1]
+                    layer_data["img_ind"][fm] = curr_img_ind + batch_ind * batch_size
+                    layer_data["fm_loc"][fm] = np.argmax(fm_acts[:,curr_img_ind]) 
+
 
     def getActivations(self):
 
         start = time.time()
-        batch_size = self.be.bsz 
-
         layers_act = self.callback_data["maxact"]
 
-        # Initialize the max activations 
         for lay in layers_act.iterkeys():
-            layers_act[lay][0] = -1e8
+            layers_act[lay + "/max_act_val"][...] = -1e8
 
         # For every image in the validation set
         for batch_ind, (x, t) in enumerate(self.valid_set, 0):
 
-            # Get the activation of each layer
-            for lay_ind, la in enumerate(self.model.layers, 0):
+            self.get_Layer_Activations(x, batch_ind)
 
-                layer_name = "{0:04}".format(lay_ind)
+            # TODO: img_data is a group created above
+            # if img_idx not in img_data:
+            #    img_data.create_dataset(img_idx, img_shape)
+            #    img_data[img_idx][...] = ___
 
-                x = la.fprop(x, inference=True)
-                # If it is not a convolution layer, I do not care
-
-                if not isinstance(la, Convolution):
-                    continue
-
-                num_fm, H, W = la.outputs.lshape
-
-                all_acts = la.outputs.get().reshape((num_fm, H * W, batch_size))
-
-                # If it is conv, I want to find the max activation for every fm
-                # If the max act is larger than the previous max act (for prev. batch), then store it. 
-                for fm in range(num_fm):
-                    fm_name = "{0:04}".format(fm)
-
-                    # This is all the activations of #batchsize images on one fm
-                    fm_acts = all_acts[fm, :, :]
-
-                    # This is the max fm_act per image
-                    max_acts = np.sort(fm_acts, axis=0)[-1:][::-1][0]
-            
-                    # If the current max activation on the fm is larger than the prev. recorded one, then
-                    # replace it. 
-                    curr_fm_max_act = np.sort(max_acts)[-1:][::-1]
-                    
-                    if curr_fm_max_act > layers_act["layer_" + layer_name][0, fm]:
-                        # This updates the max activation value
-                        layers_act["layer_" + layer_name][0,fm] = curr_fm_max_act 
-
-                        # Update the image ind and fm location
-                        curr_img_ind = np.argsort(max_acts)[-1:][::-1]
-                        # This is the image ind
-                        layers_act["layer_" + layer_name][1,fm] = curr_img_ind + batch_ind * batch_size
-                        # This gives me the fm_loc
-                        layers_act["layer_" + layer_name][2,fm] = np.argmax(fm_acts[:,curr_img_ind]) 
-
-#                layers_act["layer_" + layer_name] = np.asarray([max1_act, img_ind, fm_loc])
         end = time.time()
         print("*********** this took ", end - start) 
+
+        # Now I have all the correct image indices
+        self.store_images()
+
         return layers_act
+
+    def store_images(self):
+        layers_act = self.callback_data["maxact"]
+        img_data = self.callback_data["maxact_imgdata"]   
+        
 
     def on_epoch_end(self, epoch):
         be = self.model.be
@@ -758,8 +780,13 @@ class DeconvCallback(Callback):
             act_size = act_h * act_w
 
             layer_name = "{0:04}".format(layer_ind)
-            max1_act, img_ind, fm_loc = layers_act["layer_" + layer_name]
+            layer_data = layers_act["layer_" + layer_name]
+            max_act = layer_data["max_act_val"]
+            img_ind = layer_data["img_ind"]
+            fm_loc = layer_data["fm_loc"]
 
+
+       #     self.visualize_layer() 
             # Loop to visualize every feature map
             for fm in range(num_fm):
                 fm_name = "{0:04}".format(fm)
@@ -767,7 +794,7 @@ class DeconvCallback(Callback):
                 activation = np.zeros((num_fm, act_size, be.bsz))
 
                 # Set the max activation at the correct feature map location
-                activation[fm, fm_loc[fm], :] = max1_act[fm] 
+                activation[fm, fm_loc[fm], :] = max_act[fm] 
                 activation = be.array(activation)
 
                 # Loop over the previous layers to perform deconv
