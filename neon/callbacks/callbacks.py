@@ -729,9 +729,11 @@ class DeconvCallback(Callback):
                     layer_data["fm_loc"][fm] = np.argmax(fm_acts[:,curr_img_ind]) 
 
 
+            self.store_images(layer_data["img_ind"])
+
+
     def getActivations(self):
 
-        start = time.time()
         layers_act = self.callback_data["maxact"]
 
         for lay in layers_act.iterkeys():
@@ -747,21 +749,52 @@ class DeconvCallback(Callback):
             #    img_data.create_dataset(img_idx, img_shape)
             #    img_data[img_idx][...] = ___
 
-        end = time.time()
-        print("*********** this took ", end - start) 
-
-        # Now I have all the correct image indices
-        self.store_images()
-
         return layers_act
 
     def store_images(self):
         layers_act = self.callback_data["maxact"]
         img_data = self.callback_data["maxact_imgdata"]   
         
+    
+    def visualize_layer(self, num_fm, act_size, layer_ind, layers_act):
+        be = self.model.be
+        layer_name = "{0:04}".format(layer_ind)
+        layer_data = layers_act["layer_" + layer_name]
+        max_act = layer_data["max_act_val"]
+        img_ind = layer_data["img_ind"]
+        fm_loc = layer_data["fm_loc"]
+        layers = self.model.layers
+
+        # Loop to visualize every feature map
+        for fm in range(num_fm):
+            fm_name = "{0:04}".format(fm)
+
+            activation = np.zeros((num_fm, act_size, be.bsz))
+
+            # Set the max activation at the correct feature map location
+            activation[fm, fm_loc[fm], :] = max_act[fm] 
+            activation = be.array(activation)
+
+            # Loop over the previous layers to perform deconv
+            for l in layers[layer_ind::-1]:
+                if isinstance(l, Convolution):
+                    # output shape of deconv is the input shape of conv
+                    H, W, C = l.convparams['H'], l.convparams['W'], l.convparams['C']
+                    out_shape = (C, H, W, be.bsz)
+
+                    r = Rectlin()
+                    activation[:] = r(activation)
+
+                    out = be.empty(out_shape)
+                    l.be.bprop_conv(layer=l.nglayer, F=l.W, E=activation, grad_I=out)
+                    activation = out
+
+            self.callback_data["deconv/layer_"+layer_name + "/feature_map_"
+                               + fm_name][...] = activation.asnumpyarray()[:, :, :, 0]
+
 
     def on_epoch_end(self, epoch):
-        be = self.model.be
+        #be = self.model.be
         layers = self.model.layers
         
         # Get the activations
@@ -779,39 +812,4 @@ class DeconvCallback(Callback):
             act_w = layers[layer_ind].outputs.lshape[2]
             act_size = act_h * act_w
 
-            layer_name = "{0:04}".format(layer_ind)
-            layer_data = layers_act["layer_" + layer_name]
-            max_act = layer_data["max_act_val"]
-            img_ind = layer_data["img_ind"]
-            fm_loc = layer_data["fm_loc"]
-
-
-       #     self.visualize_layer() 
-            # Loop to visualize every feature map
-            for fm in range(num_fm):
-                fm_name = "{0:04}".format(fm)
-
-                activation = np.zeros((num_fm, act_size, be.bsz))
-
-                # Set the max activation at the correct feature map location
-                activation[fm, fm_loc[fm], :] = max_act[fm] 
-                activation = be.array(activation)
-
-                # Loop over the previous layers to perform deconv
-                for l in layers[layer_ind::-1]:
-                    if isinstance(l, Convolution):
-                        # output shape of deconv is the input shape of conv
-                        H, W, C = l.convparams['H'], l.convparams['W'], l.convparams['C']
-                        out_shape = (C, H, W, be.bsz)
-
-                        # The result of Rectlin() is an op-tree, so assign the values to activation
-                        r = Rectlin()
-                        activation[:] = r(activation)
-
-                        # deconv-fprop is conv-bprop
-                        out = be.empty(out_shape)
-                        l.be.bprop_conv(layer=l.nglayer, F=l.W, E=activation, grad_I=out)
-                        activation = out
-
-                self.callback_data["deconv/layer_"+layer_name + "/feature_map_"
-                                   + fm_name][...] = activation.asnumpyarray()[:, :, :, 0]
+            self.visualize_layer(num_fm, act_size, layer_ind, layers_act)
