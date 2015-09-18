@@ -832,5 +832,5 @@ dtype='i64')
             act_w = layers[layer_ind].outputs.lshape[2]
             act_size = act_h * act_w
 
-            self.visualize_layer(num_fm, actsize, layer_ind)
+            self.visualize_layer(num_fm, act_size, layer_ind)
         return
