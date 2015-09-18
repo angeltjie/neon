@@ -96,3 +96,34 @@ def h5_cost_data(filename, epoch_axis=True):
             ret.append((name, x, y))
 
     return ret
+
+
+def h5_deconv_data(filename):
+    """
+    Read deconv visualization data from hdf5 file.
+
+    Returns:
+        list of lists. Each inner list represents one layer, and consists of
+        tuples (fm, deconv_data)
+    """
+    ret = list()
+    with h5py.File(filename, "r") as f:
+        if 'deconv' not in f.keys():
+            return None
+        act_data = f['deconv/act_data']
+        img_data = f['deconv/img_data']
+
+        for layer in act_data.keys():
+            layer_data = list()
+            for fm in act_data[layer].iterkeys():
+                fm_data = act_data[layer][fm]
+                plot_deconv = fm_data['plot'][...]
+
+                img_ind = fm_data['img_ind'][...][0]
+                plot_img = img_data[str(img_ind)][...]
+
+                layer_data.append((fm, plot_deconv, plot_img))
+
+            ret.append((layer, layer_data))
+
+    return ret

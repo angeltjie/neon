@@ -43,11 +43,11 @@ be = gen_backend(backend=args.backend,
                  device_id=args.device_id,
                  default_dtype=args.datatype)
 
-(X_train, y_train), (X_test, y_test), nclass = load_cifar10(path=args.data_dir)
+(X_train, y_train), (X_test, y_test), nclass, lshape = load_cifar10(path=args.data_dir)
 
 # really 10 classes, pad to nearest power of 2 to match conv output
-train_set = DataIterator(X_train, y_train, nclass=16, lshape=(3, 32, 32))
-valid_set = DataIterator(X_test, y_test, nclass=16, lshape=(3, 32, 32))
+train_set = DataIterator(X_train, y_train, nclass=16, lshape=lshape)
+valid_set = DataIterator(X_test, y_test, nclass=16, lshape=lshape)
 
 init_uni = GlorotUniform()
 opt_gdm = GradientDescentMomentum(learning_rate=0.5,
@@ -81,6 +81,8 @@ mlp = Model(layers=layers)
 # configure callbacks
 callbacks = Callbacks(mlp, train_set, output_file=args.output_file, valid_set=valid_set,
                       valid_freq=args.validation_freq, progress_bar=args.progress_bar)
+callbacks.add_serialize_callback(1, 'allcnnweights.pkl')
+callbacks.add_deconv_callback(train_set, valid_set, 2)
 
 mlp.fit(train_set, optimizer=opt_gdm, num_epochs=num_epochs, cost=cost, callbacks=callbacks)
 print mlp.eval(valid_set, metric=Misclassification())

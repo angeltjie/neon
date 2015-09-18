@@ -48,7 +48,7 @@ def test_model_predict_rnn(backend):
 
 
 def test_model_serialize(backend):
-    (X_train, y_train), (X_test, y_test), nclass = load_mnist()
+    (X_train, y_train), (X_test, y_test), nclass, lshape = load_mnist()
     train_set = DataIterator([X_train, X_train], y_train, nclass=nclass, lshape=(1, 28, 28))
 
     init_norm = Gaussian(loc=0.0, scale=0.01)

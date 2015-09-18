@@ -45,10 +45,10 @@ be = gen_backend(backend=args.backend,
                  default_dtype=args.datatype)
 
 # Load dataset
-(X_train, y_train), (X_test, y_test), nclass = load_mnist(path=args.data_dir)
+(X_train, y_train), (X_test, y_test), nclass, lshape = load_mnist(path=args.data_dir)
 
 # Set input and target to X_train
-train = DataIterator(X_train, lshape=(1, 28, 28))
+train = DataIterator(X_train, lshape=lshape)
 
 # Initialize the weights and the learning rule
 init_uni = Uniform(low=-0.1, high=0.1)

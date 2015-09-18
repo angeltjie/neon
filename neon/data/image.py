@@ -146,6 +146,8 @@ class ImgMaster(ImgEndpoint):
         # We have two response buffers b/c we are double buffering
         npix = self.inner_size * self.inner_size * 3
         ishape = (3, self.inner_size, self.inner_size)
+        # Store input data shape
+        self.lshape = ishape
         origshape = (3, self.img_size, self.img_size)
         mbsz = self.be.bsz
 
@@ -164,6 +166,7 @@ class ImgMaster(ImgEndpoint):
 
         self.dev_X = self.be.iobuf(npix, dtype=np.float32)
         self.dev_X.lshape = ishape
+
         self.dev_XT = self.be.empty(self.dev_X.shape[::-1], dtype=np.uint8)
         self.dev_lbls = self.be.iobuf(1, dtype=np.int32)
         self.dev_Y = self.be.iobuf(self.nclass, dtype=np.float32)
