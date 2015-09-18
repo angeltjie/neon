@@ -101,7 +101,7 @@ def convert_rgb_to_bokehrgba(img_data, dh, dw):
     return final_image
 
 
-def deconv_fig(img_data, plot_size, figs_per_row=10):
+def deconv_fig(layer_data, plot_size, figs_per_row=10):
     """
     Generate a figure for each projection of feature map activations back to pixel space.
 
@@ -112,24 +112,46 @@ def deconv_fig(img_data, plot_size, figs_per_row=10):
     """
     rows = list()
     rowfigs = list()
-    img_h, img_w = img_data[0][1].shape[1], img_data[0][1].shape[2]
-    for fm_num, (fm_name, data) in enumerate(img_data):
-        data = np.transpose(data, (1, 2, 0))
-        rgb_img = scale_to_rgb(data)
-        rgb_img = rgb_img.astype(np.uint8)
-        final_img = convert_rgb_to_bokehrgba(rgb_img, img_h, img_w)
+    img_h, img_w = layer_data[0][1].shape[1], layer_data[0][1].shape[2]
 
-        fig = figure(title=str(fm_num+1), title_text_font_size='6pt',
+    for fm_num, (fm_name, deconv_data, img_data) in enumerate(layer_data):
+        img_data = img_data.reshape((3,32,32))
+        img_data = np.transpose(img_data, (1, 2, 0))
+        deconv_data = np.transpose(deconv_data, (1,2,0))
+
+        deconv_rgb = scale_to_rgb(deconv_data)
+        deconv_rgb = deconv_rgb.astype(np.uint8)
+        img_rgb = scale_to_rgb(img_data)
+        img_rgb = img_rgb.astype(np.uint8)
+
+        deconv_final = convert_rgb_to_bokehrgba(deconv_rgb, img_h, img_w)
+        deconv_final = deconv_final.flatten()
+        deconv_final = deconv_final[::-1]
+        deconv_final = deconv_final.reshape((32,32))
+        img_final = convert_rgb_to_bokehrgba(img_rgb, img_h, img_w)
+        img_final = img_final.flatten()
+        img_final = img_final[::-1]
+        img_final = img_final.reshape((32,32))
+
+        deconv_fig = figure(title=str(fm_num+1), title_text_font_size='6pt',
                      x_range=[0, img_w], y_range=[0, img_h],
                      plot_width=plot_size-15, plot_height=plot_size,
                      toolbar_location=None)
-        fig.axis.visible = None
+        deconv_fig.axis.visible = None
+        deconv_fig.image_rgba([deconv_final][::-1], x=[0], y=[0], dw=[img_w], dh=[img_h])
+        deconv_fig.min_border = 0
 
-        fig.image_rgba([final_img], x=[0], y=[0], dw=[img_w], dh=[img_h])
-        fig.min_border = 0
+        img_fig = figure(title=str(fm_num+1), title_text_font_size='6pt',
+                     x_range=[0, img_w], y_range=[0, img_h],
+                     plot_width=plot_size-15, plot_height=plot_size,
+                     toolbar_location=None)
+        img_fig.axis.visible = None
+        img_fig.image_rgba([img_final][::-1], x=[0], y=[0], dw=[img_w], dh=[img_h])
+        img_fig.min_border = 0
 
         if len(rowfigs) < figs_per_row:
             rowfigs.append(fig)
+            rowfigs.append(fig2)
         else:
             rows.append(hplot(*rowfigs))
             rowfigs = list()

@@ -72,8 +72,8 @@ def deconv_plot_layers(deconv_data, plot_size=150):
     Arguments:
         deconv_data ([tuple(string, ndarray)])  : deconvolution data read from h5 file
     """
-    for layer, data in deconv_data:
-        allfigs = deconv_fig(data, plot_size, figs_per_row=8)
+    for layer, layer_data in deconv_data:
+        allfigs = deconv_fig(layer_data, plot_size, figs_per_row=8)
         plotting.output_file(layer +".html") 
         plotting.save(allfigs)
 

@@ -110,12 +110,20 @@ def h5_deconv_data(filename):
     with h5py.File(filename, "r") as f:
         if 'deconv' not in f.keys():
             return None
-        deconv = f['deconv']
-        for layer in deconv.keys():
-            layer_data = list()
-            for fm, data in deconv[layer].iteritems():
-                deconv_data = data[...]
-                layer_data.append((fm, deconv_data))
-            ret.append((layer, layer_data))
+        act_data = f['deconv/act_data']
+        img_data = f['deconv/img_data'] 
 
+        for layer in act_data.keys():
+            layer_data = list()
+            for fm in act_data[layer].iterkeys():
+                fm_data = act_data[layer][fm]
+                plot_deconv = fm_data['plot'][...]
+
+                img_ind = fm_data['img_ind'][...][0]
+                plot_img = img_data[str(img_ind)][...] 
+
+                layer_data.append((fm, plot_deconv, plot_img)) 
+
+            ret.append((layer, layer_data))
+        
     return ret
