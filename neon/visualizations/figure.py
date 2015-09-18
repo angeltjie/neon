@@ -150,8 +150,8 @@ def deconv_fig(layer_data, plot_size, figs_per_row=10):
         img_fig.min_border = 0
 
         if len(rowfigs) < figs_per_row:
-            rowfigs.append(fig)
-            rowfigs.append(fig2)
+            rowfigs.append(deconv_fig)
+            rowfigs.append(img_fig)
         else:
             rows.append(hplot(*rowfigs))
             rowfigs = list()
