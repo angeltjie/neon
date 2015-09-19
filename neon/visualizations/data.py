@@ -119,8 +119,9 @@ def h5_deconv_data(filename):
                 fm_data = act_data[layer][fm]
                 plot_deconv = fm_data['plot'][...]
 
-                img_ind = fm_data['img_ind'][...][0]
-                plot_img = img_data[str(img_ind)][...]
+                batch_ind, img_ind = fm_data['img_ind'][...]
+                key = 'batch_' + str(batch_ind) + '_img_' + str(img_ind)
+                plot_img = img_data[key][...]
 
                 layer_data.append((fm, plot_deconv, plot_img))
 

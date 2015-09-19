@@ -115,7 +115,7 @@ def deconv_fig(layer_data, plot_size, figs_per_row=10):
     img_h, img_w = layer_data[0][1].shape[1], layer_data[0][1].shape[2]
 
     for fm_num, (fm_name, deconv_data, img_data) in enumerate(layer_data):
-        img_data = img_data.reshape((3, 32, 32))
+        img_data = img_data.reshape((3, img_h, img_w))
         img_data = np.transpose(img_data, (1, 2, 0))
         deconv_data = np.transpose(deconv_data, (1, 2, 0))
 
@@ -127,11 +127,11 @@ def deconv_fig(layer_data, plot_size, figs_per_row=10):
         deconv_final = convert_rgb_to_bokehrgba(deconv_rgb, img_h, img_w)
         deconv_final = deconv_final.flatten()
         deconv_final = deconv_final[::-1]
-        deconv_final = deconv_final.reshape((32, 32))
+        deconv_final = deconv_final.reshape((img_h, img_w))
         img_final = convert_rgb_to_bokehrgba(img_rgb, img_h, img_w)
         img_final = img_final.flatten()
         img_final = img_final[::-1]
-        img_final = img_final.reshape((32, 32))
+        img_final = img_final.reshape((img_h, img_w))
 
         deconv_fig = figure(title=str(fm_num+1), title_text_font_size='6pt',
                             x_range=[0, img_w], y_range=[0, img_h],

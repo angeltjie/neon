@@ -670,7 +670,7 @@ class DeconvCallback(Callback):
                 continue
 
             layer_name = "{0:04}".format(i)
-            layer_data = act_data.create_group(layer_name)
+            layer_data = act_data.create_group("layer_" + layer_name)
             num_fm = layers[i].convparams['K']
 
             for fm in range(num_fm):
@@ -678,8 +678,8 @@ class DeconvCallback(Callback):
                 fmap_data = layer_data.create_group("fmap_" + fm_name)
                 fmap_data.create_dataset("plot", (3, H, W))
                 fmap_data.create_dataset("max_act_val", (1,))
-                fmap_data.create_dataset("img_ind", (1,), dtype='i64')
-                fmap_data.create_dataset("fm_loc", (1,), dtype='i64')
+                fmap_data.create_dataset("img_ind", (2,), dtype='i32')
+                fmap_data.create_dataset("fm_loc", (1,), dtype='i32')
 
 
     def get_activations(self):
@@ -692,13 +692,17 @@ class DeconvCallback(Callback):
                 act_data[lay][fm]["max_act_val"][...] = -1e8
 
         # For every image in the validation set
-        for batch_ind, (x, t) in enumerate(self.valid_set, 0):
 
+        self.valid_set.reset()
+        for batch_ind, (x, t) in enumerate(self.valid_set, 0):
+            imgs_temp_buf = x.get()
             self.get_layer_acts(x, batch_ind)
 
-        self.store_images()
+            self.store_images(imgs_temp_buf)
+
         end = time.time()
         print ("******* getting acts and storing images took", end-start)
+        return
 
     def get_layer_acts(self, x, batch_ind):
         batch_size = self.be.bsz
@@ -744,30 +748,32 @@ class DeconvCallback(Callback):
                     max_act_val[...] = curr_fm_max_act
 
                     curr_img_ind = np.argsort(max_acts)[-1:][::-1]
-                    img_ind[...] = curr_img_ind + batch_ind * batch_size
+                    img_ind[...] = (batch_ind, curr_img_ind)
                     fm_loc[...] = np.argmax(fm_acts[:, curr_img_ind])
         return
 
-    def store_images(self):
+    def store_images(self, imgs_temp_buf):
         img_data_group = self.callback_data["deconv/img_data"]
-        img_ind = self.get_img_indices()
-        images = self.valid_set.Xdev[0]
-        img_size = images.shape[1]
+        img_size = imgs_temp_buf.shape[0]
 
-        for ind in img_ind:
-            key = str(ind)
+        act_data = self.callback_data["deconv/act_data"]
+        imgs_to_keep = self.get_img_indices() 
+
+        for batch_ind, ind in imgs_to_keep:
+            key = "batch_" + str(batch_ind) + '_img_' + str(ind)
             if key not in img_data_group:
                 img_data_group.create_dataset(key, (img_size,))
-                img_data_group[key][...] = images[ind].get()
+                img_data_group[key][...] = imgs_temp_buf[:,ind]
         return
 
     def get_img_indices(self):
-        img_ind = list()
+        img_id = list()
         act_data = self.callback_data["deconv/act_data"]
         for lay in act_data.iterkeys():
             for fm in act_data[lay].iterkeys():
-                img_ind.append(act_data[lay][fm]["img_ind"][...][0])
-        return img_ind
+                batch_ind, img_ind = act_data[lay][fm]["img_ind"][...]
+                img_id.append((batch_ind, img_ind))
+        return img_id
 
     def visualize_layer(self, num_fm, act_size, layer_ind):
         be = self.model.be
@@ -809,8 +815,8 @@ class DeconvCallback(Callback):
 
         # Get the activations
         self.get_activations()
-
         # Loop over every layer to visualize
+        start = time.time()
         for i in range(1, len(layers) + 1):
             layer_ind = len(layers) - i
 
@@ -823,4 +829,5 @@ class DeconvCallback(Callback):
             act_size = act_h * act_w
 
             self.visualize_layer(num_fm, act_size, layer_ind)
+        
         return
