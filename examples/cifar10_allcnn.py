@@ -77,12 +77,13 @@ layers.append(Activation(Softmax()))
 cost = GeneralizedCost(costfunc=CrossEntropyMulti())
 
 mlp = Model(layers=layers)
+mlp.load_weights('cifar10_weights/cifar10_350.pkl')
 
 # configure callbacks
 callbacks = Callbacks(mlp, train_set, output_file=args.output_file, valid_set=valid_set,
                       valid_freq=args.validation_freq, progress_bar=args.progress_bar)
 callbacks.add_serialize_callback(1, 'allcnnweights.pkl')
-callbacks.add_deconv_callback(train_set, valid_set, 2)
+callbacks.add_deconv_callback(train_set, valid_set, 1)
 
 mlp.fit(train_set, optimizer=opt_gdm, num_epochs=num_epochs, cost=cost, callbacks=callbacks)
 print mlp.eval(valid_set, metric=Misclassification())
