@@ -31,7 +31,9 @@ from neon.data import ImgMaster
 
 # parse the command line arguments
 parser = NeonArgparser(__doc__)
+parser.add_argument('--deconv', help='save visualization data from deconvolution')
 args = parser.parse_args()
+
 
 # they used 64 samples batch
 # hyperparameters
@@ -94,9 +96,12 @@ mlp = Model(layers=layers)
 
 callbacks = Callbacks(mlp, train, output_file=args.output_file)
 
-checkpoint_schedule = range(1, args.epochs)
-callbacks.add_serialize_callback(1, 'imagenet_cnn.pkl', history=25)
-callbacks.add_deconv_callback(train, valid_set, 1)
+if args.deconv:
+    callbacks.add_deconv_callback(train, valid_set, args.epochs)
+
+if args.save_path:
+    checkpoint_schedule = range(1, args.epochs)
+    callbacks.add_serialize_callback(checkpoint_schedule, args.save_path, history=2)
 
 mlp.fit(train, optimizer=opt_gdm, num_epochs=args.epochs, cost=cost, callbacks=callbacks)
 
