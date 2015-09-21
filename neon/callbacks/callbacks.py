@@ -20,7 +20,6 @@ from collections import deque
 from neon import NervanaObject
 from neon.util.persist import save_obj
 from timeit import default_timer
-
 from neon.layers import Convolution
 import numpy as np
 from neon.transforms.activation import Rectlin
@@ -635,10 +634,6 @@ class EarlyStopCallback(Callback):
                                 % (validation_cost))
 
 
-# TODO: This does not actually take in any images right now. All that it does is generate 'fake'
-# activations and send it back via deconv, so we get an idea of what the feature map looks like. We
-# probably want to add in the image set later.
-
 class DeconvCallback(Callback):
     """
     Callback to store data after projecting activations back to pixel space using deconvolution.
@@ -649,14 +644,12 @@ class DeconvCallback(Callback):
         train_set (DataIterator): the training dataset
         epoch_freq (int): how often (in epochs) to store deconvolution data
     """
-    def __init__(self, callback_data, model, train_set, valid_set, epoch_freq=1, history=1):
+    def __init__(self, callback_data, model, train_set, valid_set, epoch_freq=1):
         super(DeconvCallback, self).__init__(epoch_freq=epoch_freq)
         self.model = model
         self.train_set = train_set
         self.valid_set = valid_set
         self.callback_data = callback_data
-        self.history = history
-        self.checkpoint_files = deque()
 
     def on_train_begin(self, epochs):
         H = self.train_set.lshape[1]
