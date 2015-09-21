@@ -32,6 +32,7 @@ from neon.data import ImgMaster
 # parse the command line arguments
 parser = NeonArgparser(__doc__)
 parser.add_argument('--deconv', help='save visualization data from deconvolution')
+parser.add_argument('--model_file', help='load model from pkl file')
 args = parser.parse_args()
 
 
@@ -94,6 +95,12 @@ cost = GeneralizedCost(costfunc=CrossEntropyMulti())
 
 mlp = Model(layers=layers)
 
+if args.model_file:
+    import os
+    assert os.path.exists(args.model_file), '%s not found' % args.model_file
+    mlp.load_weights(args.model_file)
+
+# configure callbacks
 callbacks = Callbacks(mlp, train, output_file=args.output_file)
 
 if args.deconv:
