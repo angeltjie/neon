@@ -726,7 +726,6 @@ class DeconvCallback(Callback):
                 fm_acts = all_acts[fm, :, :]
 
                 # TODO: maybe replace with np.argpartition to speed up
-
                 # maximum activation by each image
                 max_acts = np.sort(fm_acts, axis=0)[-1:][::-1][0]
 
@@ -734,13 +733,11 @@ class DeconvCallback(Callback):
                 # one, then replace it.
 
                 # TODO: modify this to get k largest
-                # TODO: just argsort once, and then index in to see if it is larger
-                curr_fm_max_act = np.sort(max_acts)[-1:][::-1]
+                curr_img_ind = np.argsort(max_acts)[-1:][::-1]
+                curr_fm_max_act = max_acts[curr_img_ind] 
 
                 if curr_fm_max_act > max_act_val:
                     max_act_val[...] = curr_fm_max_act
-
-                    curr_img_ind = np.argsort(max_acts)[-1:][::-1]
                     img_ind[...] = (batch_ind, curr_img_ind)
                     fm_loc[...] = np.argmax(fm_acts[:, curr_img_ind])
         return
