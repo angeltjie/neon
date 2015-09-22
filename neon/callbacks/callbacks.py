@@ -656,7 +656,6 @@ class DeconvCallback(Callback):
         W = self.train_set.lshape[2]
         layers = self.model.layers
         act_data = self.callback_data.create_group("deconv/act_data")
-        img_data = self.callback_data.create_group("deconv/img_data")
 
         for i in range(len(layers)):
             if not isinstance(layers[i], Convolution):
@@ -745,8 +744,6 @@ class DeconvCallback(Callback):
     def store_images(self, imgs_temp_buf):
         img_data_group = self.callback_data["deconv/img_data"]
         img_size = imgs_temp_buf.shape[0]
-
-        act_data = self.callback_data["deconv/act_data"]
         imgs_to_keep = self.get_img_indices() 
 
         for batch_ind, ind in imgs_to_keep:
