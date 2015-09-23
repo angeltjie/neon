@@ -30,7 +30,8 @@ from neon.util.argparser import NeonArgparser
 
 # parse the command line arguments
 parser = NeonArgparser(__doc__)
-parser.add_argument('--deconv', help='save visualization data from deconvolution')
+parser.add_argument('--deconv', action='store_true', help='save visualization data from deconvolution')
+parser.add_argument('--model_file', help='load model from pkl file')
 args = parser.parse_args()
 
 # hyperparameters
@@ -79,12 +80,21 @@ cost = GeneralizedCost(costfunc=CrossEntropyMulti())
 
 mlp = Model(layers=layers)
 
+if args.model_file:
+    import os
+    assert os.path.exists(args.model_file), '%s not found' % args.model_file
+    mlp.load_weights(args.model_file)
+
 # configure callbacks
 callbacks = Callbacks(mlp, train_set, output_file=args.output_file, valid_set=valid_set,
                       valid_freq=args.validation_freq, progress_bar=args.progress_bar)
 
 if args.deconv:
     callbacks.add_deconv_callback(train_set, valid_set, args.epochs)
+
+if args.save_path:
+    checkpoint_schedule = range(1, args.epochs)
+    callbacks.add_serialize_callback(checkpoint_schedule, args.save_path, history=2)
 
 mlp.fit(train_set, optimizer=opt_gdm, num_epochs=num_epochs, cost=cost, callbacks=callbacks)
 print mlp.eval(valid_set, metric=Misclassification())

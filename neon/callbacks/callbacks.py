@@ -656,6 +656,7 @@ class DeconvCallback(Callback):
         W = self.train_set.lshape[2]
         layers = self.model.layers
         act_data = self.callback_data.create_group("deconv/act_data")
+        img_data = self.callback_data.create_group("deconv/img_data")
 
         for i in range(len(layers)):
             if not isinstance(layers[i], Convolution):

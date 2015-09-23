@@ -31,7 +31,7 @@ from neon.data import ImgMaster
 
 # parse the command line arguments
 parser = NeonArgparser(__doc__)
-parser.add_argument('--deconv', help='save visualization data from deconvolution')
+parser.add_argument('--deconv', action='store_true', help='save visualization data from deconvolution')
 parser.add_argument('--model_file', help='load model from pkl file')
 args = parser.parse_args()
 
@@ -114,5 +114,3 @@ mlp.fit(train, optimizer=opt_gdm, num_epochs=args.epochs, cost=cost, callbacks=c
 
 valid_set.exit_batch_provider()
 train.exit_batch_provider()
-
-print mlp.eval(valid_set, metric=Misclassification())
