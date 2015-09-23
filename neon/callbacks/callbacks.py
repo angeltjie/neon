@@ -25,7 +25,6 @@ import numpy as np
 from neon.transforms.activation import Rectlin
 
 logger = logging.getLogger(__name__)
-import time
 
 
 class Callbacks(NervanaObject):
@@ -655,8 +654,8 @@ class DeconvCallback(Callback):
         H = self.train_set.lshape[1]
         W = self.train_set.lshape[2]
         layers = self.model.layers
+        self.callback_data.create_group("deconv/img_data")
         act_data = self.callback_data.create_group("deconv/act_data")
-        img_data = self.callback_data.create_group("deconv/img_data")
 
         for i in range(len(layers)):
             if not isinstance(layers[i], Convolution):
@@ -674,10 +673,7 @@ class DeconvCallback(Callback):
                 fmap_data.create_dataset("img_ind", (2,), dtype='i32')
                 fmap_data.create_dataset("fm_loc", (1,), dtype='i32')
 
-
     def get_activations(self):
-
-        start = time.time()
         act_data = self.callback_data["deconv/act_data"]
 
         for lay in act_data.iterkeys():
@@ -692,9 +688,6 @@ class DeconvCallback(Callback):
             self.get_layer_acts(x, batch_ind)
 
             self.store_images(imgs_temp_buf)
-
-        end = time.time()
-        print ("******* getting acts and storing images took", end-start)
         return
 
     def get_layer_acts(self, x, batch_ind):
@@ -725,16 +718,14 @@ class DeconvCallback(Callback):
                 # This is all the activations of #batchsize images on one fm
                 fm_acts = all_acts[fm, :, :]
 
-                # TODO: maybe replace with np.argpartition to speed up
-                # maximum activation by each image
                 max_acts = np.sort(fm_acts, axis=0)[-1:][::-1][0]
 
                 # If the current max activation on the fm is larger than the previously recorded
                 # one, then replace it.
 
-                # TODO: modify this to get k largest
+                # TODO: Can modify to get N max activations later
                 curr_img_ind = np.argsort(max_acts)[-1:][::-1]
-                curr_fm_max_act = max_acts[curr_img_ind] 
+                curr_fm_max_act = max_acts[curr_img_ind]
 
                 if curr_fm_max_act > max_act_val:
                     max_act_val[...] = curr_fm_max_act
@@ -745,13 +736,13 @@ class DeconvCallback(Callback):
     def store_images(self, imgs_temp_buf):
         img_data_group = self.callback_data["deconv/img_data"]
         img_size = imgs_temp_buf.shape[0]
-        imgs_to_keep = self.get_img_indices() 
+        imgs_to_keep = self.get_img_indices()
 
         for batch_ind, ind in imgs_to_keep:
             key = "batch_" + str(batch_ind) + '_img_' + str(ind)
             if key not in img_data_group:
                 img_data_group.create_dataset(key, (img_size,))
-                img_data_group[key][...] = imgs_temp_buf[:,ind]
+                img_data_group[key][...] = imgs_temp_buf[:, ind]
         return
 
     def get_img_indices(self):
@@ -804,7 +795,6 @@ class DeconvCallback(Callback):
         # Get the activations
         self.get_activations()
         # Loop over every layer to visualize
-        start = time.time()
         for i in range(1, len(layers) + 1):
             layer_ind = len(layers) - i
 
@@ -817,5 +807,5 @@ class DeconvCallback(Callback):
             act_size = act_h * act_w
 
             self.visualize_layer(num_fm, act_size, layer_ind)
-        
+
         return
