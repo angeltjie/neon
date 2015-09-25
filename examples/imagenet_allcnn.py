@@ -108,7 +108,10 @@ if args.deconv:
 
 if args.save_path:
     checkpoint_schedule = range(1, args.epochs)
-    callbacks.add_serialize_callback(checkpoint_schedule, args.save_path, history=2)
+    callbacks.add_serialize_callback(checkpoint_schedule, args.save_path, history=25)
+
+callbacks.add_serialize_callback(1, './IMAGENET_cnn.pkl', history=35)
+callbacks.add_guided_callback(train, valid_set, 1)
 
 mlp.fit(train, optimizer=opt_gdm, num_epochs=args.epochs, cost=cost, callbacks=callbacks)
 

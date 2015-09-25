@@ -23,7 +23,7 @@ from timeit import default_timer
 from neon.layers import Convolution
 import numpy as np
 from neon.transforms.activation import Rectlin
-
+import time
 logger = logging.getLogger(__name__)
 
 
@@ -670,7 +670,6 @@ class DeconvCallback(Callback):
         W = self.train_set.lshape[2]
         layers = self.model.layers
         self.callback_data.create_group("deconv/img_data")
-        self.callback_data.create_group("deconv/img_act_data")
         max_act_data = self.callback_data.create_group("deconv/max_act_data")
 
         for i in range(len(layers)):
@@ -850,7 +849,6 @@ class GuidedBpropCallback(Callback):
         W = self.train_set.lshape[2]
         layers = self.model.layers
         self.callback_data.create_group("deconv/img_data")
-        self.callback_data.create_group("deconv/img_act_data")
         max_act_data = self.callback_data.create_group("deconv/max_act_data")
 
         for i in range(len(layers)):
@@ -881,14 +879,12 @@ class GuidedBpropCallback(Callback):
         self.valid_set.reset()
         for batch_ind, (x, t) in enumerate(self.valid_set, 0):
             imgs_temp_buf = x.get()
-            all_acts_temp = self.get_layer_acts(x, batch_ind)
-
-            self.store_images(imgs_temp_buf, all_acts_temp)
+            self.get_layer_acts(x, batch_ind)
+            self.store_images(imgs_temp_buf)
         return
 
     def get_layer_acts(self, x, batch_ind):
         batch_size = self.be.bsz
-        all_acts_temp = [] 
 
         # Get the activation of each layer
         for lay_ind, la in enumerate(self.model.layers, 0):
@@ -929,11 +925,11 @@ class GuidedBpropCallback(Callback):
                     img_ind[...] = (batch_ind, curr_img_ind)
                     fm_loc[...] = np.argmax(fm_acts[:, curr_img_ind])
 
-            all_acts_temp.append((lay_ind, all_acts))
-        return np.array(all_acts_temp)
+        return 
 
     def store_images(self, imgs_temp_buf):
         img_data_group = self.callback_data["deconv/img_data"]
+
         img_size = imgs_temp_buf.shape[0]
         imgs_to_keep = self.get_img_indices()
 
@@ -942,6 +938,7 @@ class GuidedBpropCallback(Callback):
             if key not in img_data_group:
                 img_data_group.create_dataset(key, (img_size,))
                 img_data_group[key][...] = imgs_temp_buf[:, ind]
+
         return
 
     def get_img_indices(self):
@@ -954,12 +951,13 @@ class GuidedBpropCallback(Callback):
         return img_id
 
     def visualize_layer(self, num_fm, act_size, layer_ind):
-        be = self.model.be
+        model = self.model
+        be = model.be
         layer_name = "{0:04}".format(layer_ind)
         layer_data = self.callback_data["deconv/max_act_data/layer_" + layer_name]
-        layers = self.model.layers
+        img_data = self.callback_data["deconv/img_data"]
+        layers = model.layers
 
-        import ipdb; ipdb.set_trace()
         # Loop to visualize every feature map
         for fm in range(num_fm):
             fm_name = "fmap_" + "{0:04}".format(fm)
@@ -969,6 +967,15 @@ class GuidedBpropCallback(Callback):
             plot = fm_data["plot"]
             batch_ind, img_ind = fm_data["img_ind"][0], fm_data["img_ind"][1] 
 
+            # Image that most activates the fm
+            img = img_data["batch_" + str(batch_ind) + "_img_" + str(img_ind)][...] 
+            # Create batch to perform fprop
+            img_batch = np.zeros((img.shape[0], 64)) 
+            img_batch[:, 0] = img
+            img_batch = be.array(img_batch)
+            model.fprop(img_batch, inference=True) 
+                
+            
             activation = np.zeros((num_fm, act_size, be.bsz))
 
             # Set the max activation at the correct feature map location
@@ -1007,8 +1014,12 @@ class GuidedBpropCallback(Callback):
     def on_epoch_end(self, epoch):
         layers = self.model.layers
 
+        start = time.time()
         # Get the activations
         self.get_activations()
+        end = time.time()
+
+        print("Took " + str(end-start) + " s to get activations and store images")
         # Loop over every layer to visualize
         for i in range(1, len(layers) + 1):
             layer_ind = len(layers) - i
@@ -1021,6 +1032,8 @@ class GuidedBpropCallback(Callback):
             act_w = layers[layer_ind].outputs.lshape[2]
             act_size = act_h * act_w
 
+            start = time.time()
             self.visualize_layer(num_fm, act_size, layer_ind)
-
+            end = time.time()
+            print ("Took " + str(end-start) + " s to compute visualization data")
         return

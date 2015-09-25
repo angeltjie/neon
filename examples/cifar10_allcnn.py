@@ -96,5 +96,8 @@ if args.save_path:
     checkpoint_schedule = range(1, args.epochs)
     callbacks.add_serialize_callback(checkpoint_schedule, args.save_path, history=2)
 
+#callbacks.add_serialize_callback(1, './TESTCIFAR', history=1)
+callbacks.add_guided_callback(train_set, valid_set, 1)
+
 mlp.fit(train_set, optimizer=opt_gdm, num_epochs=num_epochs, cost=cost, callbacks=callbacks)
 print mlp.eval(valid_set, metric=Misclassification())

@@ -115,6 +115,8 @@ def deconv_fig(layer_data, plot_size, figs_per_row=10):
     img_h, img_w = layer_data[0][1].shape[1], layer_data[0][1].shape[2]
 
     for fm_num, (fm_name, deconv_data, img_data) in enumerate(layer_data):
+        if fm_num > 30:
+            break
         img_data = img_data.reshape((3, img_h, img_w))
         img_data = np.transpose(img_data, (1, 2, 0))
         deconv_data = np.transpose(deconv_data, (1, 2, 0))

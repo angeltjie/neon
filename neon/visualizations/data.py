@@ -110,7 +110,7 @@ def h5_deconv_data(filename):
     with h5py.File(filename, "r") as f:
         if 'deconv' not in f.keys():
             return None
-        act_data = f['deconv/act_data']
+        act_data = f['deconv/max_act_data']
         img_data = f['deconv/img_data']
 
         for layer in act_data.keys():
